@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/eljakani/laravel-ward/cmd"
+	"github.com/eljakani/ward/cmd"
 )
 
 func main() {

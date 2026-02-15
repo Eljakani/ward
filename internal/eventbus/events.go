@@ -3,7 +3,7 @@ package eventbus
 import (
 	"time"
 
-	"github.com/eljakani/laravel-ward/internal/models"
+	"github.com/eljakani/ward/internal/models"
 )
 
 // EventType identifies the kind of event.

@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/eljakani/laravel-ward/internal/tui/theme"
+	"github.com/eljakani/ward/internal/tui/banner"
+	"github.com/eljakani/ward/internal/tui/theme"
 )
 
 // HeaderData holds the information displayed in the header bar.
@@ -19,53 +20,65 @@ type HeaderData struct {
 
 // RenderHeader renders the top header bar across the full width.
 func RenderHeader(data HeaderData, t *theme.Theme, width int) string {
-	logo := " WARD "
+	logo := " " + banner.RenderCompact() + " "
+
+	sep := t.HeaderBar.Render(
+		lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#BDBDBD", Dark: "#616161"}).
+			Render(" | "),
+	)
 
 	project := ""
 	if data.ProjectName != "" {
-		project = fmt.Sprintf("  Project: %s", data.ProjectName)
+		project = t.HeaderBar.Render(fmt.Sprintf("Project: %s", data.ProjectName))
 	}
 
 	laravel := ""
 	if data.LaravelVersion != "" {
-		laravel = fmt.Sprintf("  Laravel %s", data.LaravelVersion)
+		laravel = t.HeaderBar.Render(fmt.Sprintf("Laravel %s", data.LaravelVersion))
 	}
 
-	version := fmt.Sprintf("  v%s", data.ToolVersion)
+	version := t.HeaderBar.Render(fmt.Sprintf("v%s", data.ToolVersion))
 
 	var status string
+	statusBg := lipgloss.NewStyle().Padding(0, 1).Bold(true).
+		Foreground(lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#FFFFFF"})
+
 	switch {
 	case data.ScanError:
-		status = t.ErrorStyle.Render(" ERROR ")
+		status = statusBg.Background(t.Colors.Error).Render(" ERROR ")
 	case data.ScanComplete:
-		status = t.SuccessStyle.
-			Background(t.Colors.Success).
-			Foreground(lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#FFFFFF"}).
-			Render(" COMPLETE ")
+		status = statusBg.Background(t.Colors.Success).Render(" COMPLETE ")
 	case data.ScanRunning:
-		status = t.WarningStyle.
-			Background(t.Colors.StageActive).
-			Foreground(lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#FFFFFF"}).
-			Render(" SCANNING ")
+		status = statusBg.Background(t.Colors.StageActive).Render(" SCANNING ")
 	default:
 		status = t.Muted.Render(" READY ")
 	}
 
-	left := logo + project + laravel + version
-	right := status
+	// Build left side
+	leftParts := []string{logo}
+	if project != "" {
+		leftParts = append(leftParts, sep, project)
+	}
+	if laravel != "" {
+		leftParts = append(leftParts, sep, laravel)
+	}
+	leftParts = append(leftParts, sep, version)
+	left := lipgloss.JoinHorizontal(lipgloss.Center, leftParts...)
 
-	leftRendered := t.HeaderBar.Render(left)
-	rightRendered := t.HeaderBar.Render(right)
-
-	leftWidth := lipgloss.Width(leftRendered)
-	rightWidth := lipgloss.Width(rightRendered)
+	leftWidth := lipgloss.Width(left)
+	rightWidth := lipgloss.Width(status)
 
 	gap := width - leftWidth - rightWidth
 	if gap < 0 {
 		gap = 1
 	}
 
-	padding := t.HeaderBar.Render(fmt.Sprintf("%*s", gap, ""))
+	padding := fmt.Sprintf("%*s", gap, "")
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftRendered, padding, rightRendered)
+	bar := t.HeaderBar.Width(width).Render(
+		lipgloss.JoinHorizontal(lipgloss.Center, left, padding, status),
+	)
+
+	return bar
 }

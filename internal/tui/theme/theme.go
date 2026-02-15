@@ -2,7 +2,7 @@ package theme
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/eljakani/laravel-ward/internal/models"
+	"github.com/eljakani/ward/internal/models"
 )
 
 // Colors defines the full color palette with adaptive light/dark support.

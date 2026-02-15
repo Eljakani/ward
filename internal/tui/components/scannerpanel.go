@@ -6,8 +6,8 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/eljakani/laravel-ward/internal/models"
-	"github.com/eljakani/laravel-ward/internal/tui/theme"
+	"github.com/eljakani/ward/internal/models"
+	"github.com/eljakani/ward/internal/tui/theme"
 )
 
 // ScannerPanel displays scanner statuses with spinners for running scanners.

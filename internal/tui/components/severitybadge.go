@@ -3,8 +3,8 @@ package components
 import (
 	"strings"
 
-	"github.com/eljakani/laravel-ward/internal/models"
-	"github.com/eljakani/laravel-ward/internal/tui/theme"
+	"github.com/eljakani/ward/internal/models"
+	"github.com/eljakani/ward/internal/tui/theme"
 )
 
 // RenderSeverityBadge renders a colored badge like " CRITICAL " or " HIGH ".

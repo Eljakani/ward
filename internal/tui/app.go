@@ -8,11 +8,11 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/eljakani/laravel-ward/internal/eventbus"
-	"github.com/eljakani/laravel-ward/internal/models"
-	"github.com/eljakani/laravel-ward/internal/tui/components"
-	"github.com/eljakani/laravel-ward/internal/tui/theme"
-	"github.com/eljakani/laravel-ward/internal/tui/views"
+	"github.com/eljakani/ward/internal/eventbus"
+	"github.com/eljakani/ward/internal/models"
+	"github.com/eljakani/ward/internal/tui/components"
+	"github.com/eljakani/ward/internal/tui/theme"
+	"github.com/eljakani/ward/internal/tui/views"
 )
 
 const version = "0.1.0"

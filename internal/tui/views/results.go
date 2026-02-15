@@ -9,9 +9,9 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/eljakani/laravel-ward/internal/models"
-	"github.com/eljakani/laravel-ward/internal/tui/components"
-	"github.com/eljakani/laravel-ward/internal/tui/theme"
+	"github.com/eljakani/ward/internal/models"
+	"github.com/eljakani/ward/internal/tui/components"
+	"github.com/eljakani/ward/internal/tui/theme"
 )
 
 // SortColumn determines the sort field for findings.

@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"fmt"
+
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/eljakani/laravel-ward/internal/eventbus"
-	"github.com/eljakani/laravel-ward/internal/tui"
+	"github.com/eljakani/ward/internal/config"
+	"github.com/eljakani/ward/internal/eventbus"
+	"github.com/eljakani/ward/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -14,6 +17,13 @@ var scanCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		targetPath := args[0]
 
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("loading config: %w", err)
+		}
+
+		_ = cfg // will be passed to orchestrator when implemented
+
 		bus := eventbus.New()
 		model := tui.NewApp(bus, targetPath)
 
@@ -23,7 +33,7 @@ var scanCmd = &cobra.Command{
 		bridge.Start()
 		defer bridge.Stop()
 
-		_, err := p.Run()
+		_, err = p.Run()
 		return err
 	},
 }

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/eljakani/ward/internal/tui/banner"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +13,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("Laravel Ward v%s\n", Version)
+		fmt.Println(banner.Render(Version))
 	},
 }
 

@@ -3,7 +3,7 @@ package components
 import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/eljakani/laravel-ward/internal/tui/theme"
+	"github.com/eljakani/ward/internal/tui/theme"
 )
 
 // RenderFooter renders the bottom help bar.

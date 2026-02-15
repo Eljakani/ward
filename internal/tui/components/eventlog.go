@@ -6,8 +6,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/eljakani/laravel-ward/internal/eventbus"
-	"github.com/eljakani/laravel-ward/internal/tui/theme"
+	"github.com/eljakani/ward/internal/eventbus"
+	"github.com/eljakani/ward/internal/tui/theme"
 )
 
 // EventLog is a scrollable event viewport.

@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/eljakani/laravel-ward/internal/models"
-	"github.com/eljakani/laravel-ward/internal/tui/theme"
+	"github.com/eljakani/ward/internal/models"
+	"github.com/eljakani/ward/internal/tui/theme"
 )
 
 // RenderLiveStats renders horizontal severity count badges.
