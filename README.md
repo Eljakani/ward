@@ -1,15 +1,8 @@
-```
- ██╗    ██╗ █████╗ ██████╗ ██████╗
- ██║    ██║██╔══██╗██╔══██╗██╔══██╗
- ██║ █╗ ██║███████║██████╔╝██║  ██║
- ██║███╗██║██╔══██║██╔══██╗██║  ██║
- ╚███╔███╔╝██║  ██║██║  ██║██████╔╝
-  ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝
-```
+<p align="center">
+  <img src="assets/ward-logo.svg" alt="Ward" width="500">
+</p>
 
-# Ward
-
-**A security scanner built specifically for Laravel.**
+<p align="center"><strong>A security scanner built specifically for Laravel.</strong></p>
 
 Ward understands your Laravel application — its routes, models, controllers, middleware, Blade templates, config files, `.env` secrets, Composer dependencies, and more. It doesn't just grep for patterns. It resolves your project's structure first, then runs targeted security checks against it.
 

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="550" height="195" viewBox="0 0 550 195">
+  <text xml:space="preserve" font-family="SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace" font-size="20" font-weight="bold">
+    <tspan x="20" y="34" fill="#FF3333"> ██╗    ██╗ █████╗ ██████╗ ██████╗ </tspan>
+    <tspan x="20" y="58" fill="#FF2D55"> ██║    ██║██╔══██╗██╔══██╗██╔══██╗</tspan>
+    <tspan x="20" y="82" fill="#E93578"> ██║ █╗ ██║███████║██████╔╝██║  ██║</tspan>
+    <tspan x="20" y="106" fill="#C83DA0"> ██║███╗██║██╔══██║██╔══██╗██║  ██║</tspan>
+    <tspan x="20" y="130" fill="#A344C8"> ╚███╔███╔╝██║  ██║██║  ██║██████╔╝</tspan>
+    <tspan x="20" y="154" fill="#7C4DFF">  ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ </tspan>
+  </text>
+  <text x="30" y="183" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" fill="#9E9E9E" font-style="italic">Laravel Security Scanner</text>
+</svg>
