@@ -91,8 +91,8 @@ func (r *SARIFReporter) Generate(_ context.Context, report *models.ScanReport) e
 					Driver: sarifDriver{
 						Name:            "Ward",
 						InformationURI:  "https://github.com/Eljakani/ward",
-						Version:         "0.1.0",
-						SemanticVersion: "0.1.0",
+						Version:         "0.2.0",
+						SemanticVersion: "0.2.0",
 						Rules:           rules,
 					},
 				},

@@ -15,7 +15,7 @@ import (
 	"github.com/eljakani/ward/internal/tui/views"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 // App is the root Bubble Tea model for Laravel Ward.
 type App struct {
