@@ -60,6 +60,14 @@ Ward scans your project in a pipeline of five stages:
 go install github.com/eljakani/ward@latest
 ```
 
+Make sure `$GOPATH/bin` is in your `PATH` (Go installs binaries there):
+
+```bash
+export PATH="$PATH:$(go env GOPATH)/bin"
+```
+
+> Add this line to your `~/.bashrc` or `~/.zshrc` to make it permanent.
+
 Or build from source:
 
 ```bash
