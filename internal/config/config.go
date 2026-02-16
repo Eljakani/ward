@@ -61,7 +61,7 @@ func Default() *WardConfig {
 	return &WardConfig{
 		Severity: "info",
 		Output: OutputConfig{
-			Formats: []string{"terminal"},
+			Formats: []string{"json", "sarif", "html", "markdown"},
 			Dir:     ".",
 		},
 		Scanners: ScannersConfig{},

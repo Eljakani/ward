@@ -1,0 +1,117 @@
+# Ward Default Rules — Authentication & Authorization
+# Detects weak authentication patterns, missing authorization, and session issues.
+
+rules:
+  - id: AUTH-001
+    title: "Route without middleware"
+    description: >
+      A route is defined without any middleware. Depending on the route, this
+      may expose endpoints without authentication or rate limiting. Sensitive
+      routes should always have auth or throttle middleware.
+    severity: low
+    category: Authentication
+    enabled: true
+    tags: [auth, owasp-a07, cwe-306]
+    patterns:
+      - type: regex
+        target: routes-files
+        pattern: 'Route::(get|post|put|patch|delete)\s*\([^;]*\)\s*;'
+    remediation: |
+      Apply middleware to routes:
+        Route::get('/dashboard', [DashboardController::class, 'index'])
+            ->middleware(['auth', 'verified']);
+      Or group routes:
+        Route::middleware(['auth'])->group(function () { ... });
+    references:
+      - https://cwe.mitre.org/data/definitions/306.html
+
+  - id: AUTH-002
+    title: "Hard-coded role or permission check"
+    description: >
+      A role or permission is checked using a hardcoded string comparison.
+      This is fragile, hard to maintain, and can lead to authorization bypasses
+      when roles are renamed or restructured.
+    severity: low
+    category: Authorization
+    enabled: true
+    tags: [authz, cwe-863]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '->role\s*===?\s*[''"]admin[''"]'
+      - type: regex
+        target: php-files
+        pattern: 'hasRole\s*\(\s*[''"]admin[''"]'
+    remediation: |
+      Use constants or enums for roles:
+        if ($user->hasRole(Role::ADMIN)) { ... }
+      Better yet, use Laravel's Gate/Policy system:
+        Gate::authorize('manage-users');
+    references:
+      - https://cwe.mitre.org/data/definitions/863.html
+
+  - id: AUTH-003
+    title: "Auth::loginUsingId() without validation"
+    description: >
+      Auth::loginUsingId() authenticates a user by their ID without requiring
+      a password. If the ID comes from user input, this allows authentication
+      bypass.
+    severity: high
+    category: Authentication
+    enabled: true
+    tags: [auth, cwe-287]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: 'Auth::loginUsingId\s*\(\s*\$'
+      - type: regex
+        target: php-files
+        pattern: 'auth\(\)->loginUsingId\s*\(\s*\$'
+    remediation: |
+      Only use loginUsingId() with trusted, system-generated IDs (e.g. after
+      verifying a signed URL or OAuth callback). Never pass user input directly:
+        // After verifying signed URL
+        Auth::loginUsingId($request->route('id'));
+    references:
+      - https://cwe.mitre.org/data/definitions/287.html
+
+  - id: AUTH-004
+    title: "Sensitive action without password confirmation"
+    description: >
+      A sensitive operation (deleting account, changing email/password, managing
+      payments) is performed without re-confirming the user's password. An
+      attacker with a hijacked session could perform these actions.
+    severity: low
+    category: Authentication
+    enabled: true
+    tags: [auth, cwe-306]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '(deleteAccount|destroy.*[Uu]ser|changeEmail|change.*[Pp]assword)\s*\('
+    remediation: |
+      Use Laravel's password.confirm middleware:
+        Route::delete('/account', [AccountController::class, 'destroy'])
+            ->middleware(['auth', 'password.confirm']);
+
+  - id: AUTH-005
+    title: "API route without throttle middleware"
+    description: >
+      An API route group does not include throttle middleware. Without rate
+      limiting, APIs are vulnerable to brute force, credential stuffing,
+      and denial-of-service attacks.
+    severity: medium
+    category: Authentication
+    enabled: true
+    tags: [rate-limiting, owasp-a07, cwe-307]
+    patterns:
+      - type: regex
+        target: routes-files
+        pattern: 'Route::(get|post|put|patch|delete)\s*\([^)]*api[^;]*\)\s*;'
+    remediation: |
+      Apply throttle middleware to API routes:
+        Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
+            // API routes
+        });
+    references:
+      - https://cwe.mitre.org/data/definitions/307.html

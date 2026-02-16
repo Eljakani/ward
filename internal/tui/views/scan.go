@@ -1,6 +1,9 @@
 package views
 
 import (
+	"fmt"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/eljakani/ward/internal/eventbus"
@@ -21,6 +24,10 @@ type ScanView struct {
 
 	// Data
 	severityCounts map[models.Severity]int
+	projectName    string
+	laravelVersion string
+	phpVersion     string
+	packageCount   int
 
 	// Layout
 	width  int
@@ -45,10 +52,16 @@ func (v *ScanView) SetSize(w, h int) {
 	// Layout allocation:
 	//   stage progress:  1 line
 	//   separator:       1 line
+	//   project info:    1 line (when available)
+	//   separator:       1 line (when info shown)
 	//   live stats:      1 line
 	//   separator:       1 line
 	//   body:            remaining
-	bodyH := h - 4
+	overhead := 4
+	if v.projectName != "" || v.laravelVersion != "" {
+		overhead += 2 // info row + separator
+	}
+	bodyH := h - overhead
 	if bodyH < 4 {
 		bodyH = 4
 	}
@@ -80,6 +93,14 @@ func (v *ScanView) UpdateEventLog(events []eventbus.Event) {
 	v.eventLog.SetEvents(events)
 }
 
+// UpdateProjectInfo sets the resolved project context details.
+func (v *ScanView) UpdateProjectInfo(name, laravelVer, phpVer string, pkgCount int) {
+	v.projectName = name
+	v.laravelVersion = laravelVer
+	v.phpVersion = phpVer
+	v.packageCount = pkgCount
+}
+
 // SetScanComplete marks the scan as complete for stage rendering.
 func (v *ScanView) SetScanComplete(complete bool) {
 	v.scanComplete = complete
@@ -107,19 +128,45 @@ func (v *ScanView) View(width, height int) string {
 	// 2. Separator
 	sep := components.RenderSeparator(v.theme, width)
 
-	// 3. Live stats
+	// 3. Project info bar (only shown once resolved)
+	infoRow := v.renderProjectInfo(width)
+
+	// 4. Live stats
 	statsRow := components.RenderLiveStats(v.severityCounts, v.theme, width)
 
-	// 4. Body: scanner panel (left) + event log (right)
+	// 5. Body: scanner panel (left) + event log (right)
 	scannerView := v.scannerPanel.View()
 	logView := v.eventLog.View()
 	body := lipgloss.JoinHorizontal(lipgloss.Top, scannerView, " ", logView)
 
-	return lipgloss.JoinVertical(lipgloss.Left,
-		stageRow,
-		sep,
-		statsRow,
-		sep,
-		body,
-	)
+	rows := []string{stageRow, sep}
+	if infoRow != "" {
+		rows = append(rows, infoRow, sep)
+	}
+	rows = append(rows, statsRow, sep, body)
+
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+func (v *ScanView) renderProjectInfo(width int) string {
+	if v.projectName == "" && v.laravelVersion == "" {
+		return ""
+	}
+
+	var parts []string
+	if v.projectName != "" {
+		parts = append(parts, v.theme.Bold.Render(v.projectName))
+	}
+	if v.laravelVersion != "" {
+		parts = append(parts, v.theme.AccentStyle.Render(fmt.Sprintf("Laravel %s", v.laravelVersion)))
+	}
+	if v.phpVersion != "" {
+		parts = append(parts, v.theme.AccentStyle.Render(fmt.Sprintf("PHP %s", v.phpVersion)))
+	}
+	if v.packageCount > 0 {
+		parts = append(parts, v.theme.Muted.Render(fmt.Sprintf("%d packages", v.packageCount)))
+	}
+
+	row := strings.Join(parts, v.theme.Muted.Render("  ·  "))
+	return lipgloss.PlaceHorizontal(width, lipgloss.Center, row)
 }

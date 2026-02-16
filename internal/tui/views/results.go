@@ -93,9 +93,16 @@ func (v *ResultsView) SetSize(w, h int) {
 	v.width = w
 	v.height = h
 
-	// Layout: summary (3 lines) + separator (1) + body (remaining)
-	summaryH := 4
-	bodyH := h - summaryH
+	// Layout overhead:
+	//   summary header:   1 line
+	//   project info:     1 line
+	//   blank:            1 line
+	//   severity stats:   1 line
+	//   separator:        1 line
+	//   sort indicator:   1 line
+	//   total overhead:   6 lines
+	overheadH := 6
+	bodyH := h - overheadH
 	if bodyH < 6 {
 		bodyH = 6
 	}
@@ -220,17 +227,57 @@ func (v *ResultsView) View(width, height int) string {
 func (v *ResultsView) renderSummary(width int) string {
 	counts := v.report.CountBySeverity()
 	total := len(v.report.Findings)
+	pc := v.report.ProjectContext
 
 	header := v.theme.Title.Render(fmt.Sprintf("  Scan Complete  —  %d findings in %s",
 		total, v.report.Duration.Round(time.Millisecond)))
+
+	// Project info line
+	var infoParts []string
+	if pc.ProjectName != "" {
+		infoParts = append(infoParts, pc.ProjectName)
+	}
+	if pc.LaravelVersion != "" {
+		infoParts = append(infoParts, fmt.Sprintf("Laravel %s", pc.LaravelVersion))
+	}
+	if pc.PHPVersion != "" {
+		infoParts = append(infoParts, fmt.Sprintf("PHP %s", pc.PHPVersion))
+	}
+	if len(pc.InstalledPackages) > 0 {
+		infoParts = append(infoParts, fmt.Sprintf("%d packages", len(pc.InstalledPackages)))
+	}
+	infoParts = append(infoParts, fmt.Sprintf("%d scanners", len(v.report.ScannersRun)))
+
+	sep := v.theme.Muted.Render(" · ")
+	var styledParts []string
+	for _, p := range infoParts {
+		styledParts = append(styledParts, v.theme.AccentStyle.Render(p))
+	}
+	infoLine := lipgloss.JoinHorizontal(lipgloss.Center, interleave(styledParts, sep)...)
 
 	stats := components.RenderLiveStats(counts, v.theme, width)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.PlaceHorizontal(width, lipgloss.Center, header),
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, infoLine),
 		"",
 		stats,
 	)
+}
+
+// interleave inserts sep between each element.
+func interleave(items []string, sep string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(items)*2-1)
+	for i, item := range items {
+		if i > 0 {
+			result = append(result, sep)
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 func (v *ResultsView) renderTable() string {

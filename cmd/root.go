@@ -45,5 +45,5 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable color output")
-	rootCmd.PersistentFlags().StringVarP(&outputFmt, "output", "o", "tui", "output format: tui, json, text")
+	rootCmd.PersistentFlags().StringVarP(&outputFmt, "output", "o", "tui", "output mode: tui (interactive), or comma-separated formats (json,sarif,html,markdown)")
 }

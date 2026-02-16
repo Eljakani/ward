@@ -25,6 +25,8 @@ const (
 
 	EventFindingDiscovered
 
+	EventContextResolved
+
 	EventProgressUpdate
 	EventLogMessage
 )
@@ -53,6 +55,8 @@ func (t EventType) String() string {
 		return "scanner.skipped"
 	case EventFindingDiscovered:
 		return "finding.discovered"
+	case EventContextResolved:
+		return "context.resolved"
 	case EventProgressUpdate:
 		return "progress.update"
 	case EventLogMessage:
@@ -124,6 +128,14 @@ type ScannerSkippedData struct {
 
 type FindingDiscoveredData struct {
 	Finding models.Finding
+}
+
+type ContextResolvedData struct {
+	ProjectName    string
+	LaravelVersion string
+	PHPVersion     string
+	FrameworkType  string
+	PackageCount   int
 }
 
 type ProgressUpdateData struct {

@@ -1,0 +1,146 @@
+# Ward Default Rules — Injection
+# Detects SQL injection, command injection, code injection, and deserialization risks.
+
+rules:
+  - id: INJECT-001
+    title: "DB::raw() with variable interpolation"
+    description: >
+      DB::raw() is called with a PHP variable, which may lead to SQL injection
+      if the variable contains unsanitized user input. Laravel's query builder
+      automatically escapes parameters — use bindings instead of raw SQL.
+    severity: high
+    category: Injection
+    enabled: true
+    tags: [sqli, owasp-a03, cwe-89]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: 'DB::raw\(\s*[''"].*\$'
+      - type: regex
+        target: php-files
+        pattern: 'DB::raw\(\s*\$'
+    remediation: |
+      Use parameter bindings:
+        DB::raw('COUNT(*) as count')           // safe — no variables
+        DB::select('SELECT * FROM users WHERE id = ?', [$id])  // safe — bound
+      Avoid:
+        DB::raw("WHERE name = '$name'")        // vulnerable
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+      - https://cwe.mitre.org/data/definitions/89.html
+
+  - id: INJECT-002
+    title: "Raw query methods with variable concatenation"
+    description: >
+      A raw query method (whereRaw, selectRaw, havingRaw, orderByRaw, groupByRaw)
+      uses string concatenation or interpolation with a variable. This can lead
+      to SQL injection.
+    severity: high
+    category: Injection
+    enabled: true
+    tags: [sqli, owasp-a03, cwe-89]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '->(whereRaw|selectRaw|havingRaw|orderByRaw|groupByRaw)\(\s*[''"].*\$'
+      - type: regex
+        target: php-files
+        pattern: '->(whereRaw|selectRaw|havingRaw|orderByRaw|groupByRaw)\(\s*\$'
+    remediation: |
+      Pass bindings as the second argument:
+        ->whereRaw('price > ?', [$minPrice])
+      Or use the query builder:
+        ->where('price', '>', $minPrice)
+    references:
+      - https://cwe.mitre.org/data/definitions/89.html
+
+  - id: INJECT-003
+    title: "Shell command execution function"
+    description: >
+      PHP shell execution functions (exec, system, shell_exec, passthru, popen,
+      proc_open) are being used. If any argument includes user input, this leads
+      to OS command injection.
+    severity: high
+    category: Injection
+    enabled: true
+    tags: [command-injection, owasp-a03, cwe-78]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\b(exec|system|shell_exec|passthru|popen|proc_open)\s*\('
+    remediation: |
+      Avoid shell commands when possible. If necessary:
+        - Use escapeshellarg() and escapeshellcmd() for all arguments
+        - Use Symfony\Component\Process\Process for safer execution
+        - Validate and whitelist expected input values
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+      - https://cwe.mitre.org/data/definitions/78.html
+
+  - id: INJECT-004
+    title: "eval() usage detected"
+    description: >
+      eval() executes arbitrary PHP code from a string. If the string includes
+      any user-controlled data, this results in remote code execution.
+    severity: critical
+    category: Injection
+    enabled: true
+    tags: [code-injection, owasp-a03, cwe-95]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\beval\s*\('
+    remediation: |
+      Remove eval() and replace with proper logic:
+        - Use a templating engine instead of eval'd strings
+        - Use a strategy pattern or configuration instead of dynamic code
+        - If absolutely necessary, use a sandboxed environment
+    references:
+      - https://cwe.mitre.org/data/definitions/95.html
+
+  - id: INJECT-005
+    title: "Unsafe deserialization with unserialize()"
+    description: >
+      unserialize() on untrusted data can lead to object injection attacks,
+      potentially allowing remote code execution through PHP magic methods
+      (__wakeup, __destruct, __toString).
+    severity: high
+    category: Injection
+    enabled: true
+    tags: [deserialization, owasp-a08, cwe-502]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\bunserialize\s*\(\s*\$'
+    remediation: |
+      Use json_decode() instead of unserialize() for data interchange.
+      If unserialize() is required, use the allowed_classes option:
+        unserialize($data, ['allowed_classes' => [MyClass::class]]);
+    references:
+      - https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/
+      - https://cwe.mitre.org/data/definitions/502.html
+
+  - id: INJECT-006
+    title: "Direct SQL query with string concatenation"
+    description: >
+      A raw SQL statement is being constructed using string concatenation with
+      variables, bypassing Laravel's query builder protections. This pattern
+      is highly susceptible to SQL injection.
+    severity: critical
+    category: Injection
+    enabled: true
+    tags: [sqli, owasp-a03, cwe-89]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: 'DB::statement\(\s*[''"].*\.\s*\$'
+      - type: regex
+        target: php-files
+        pattern: 'DB::(select|insert|update|delete)\(\s*[''"].*\.\s*\$'
+    remediation: |
+      Use parameter bindings:
+        DB::select('SELECT * FROM users WHERE email = ?', [$email]);
+      Or use the query builder:
+        DB::table('users')->where('email', $email)->get();
+    references:
+      - https://cwe.mitre.org/data/definitions/89.html

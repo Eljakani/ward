@@ -1,0 +1,165 @@
+# Ward Default Rules — Security Configuration
+# Detects insecure configurations: CORS, CSRF, SSL, mass assignment, file uploads.
+
+rules:
+  - id: CONFIG-001
+    title: "Wildcard CORS origin allowed"
+    description: >
+      The CORS configuration allows all origins ('*'). This permits any website
+      to make authenticated cross-origin requests to your API, potentially
+      exposing user data through CSRF-like attacks.
+    severity: medium
+    category: Configuration
+    enabled: true
+    tags: [cors, owasp-a05, cwe-942]
+    patterns:
+      - type: regex
+        target: config-files
+        pattern: '''allowed_origins''\s*=>\s*\[?\s*[''"]?\*[''"]?\s*\]?'
+    remediation: |
+      Specify explicit allowed origins:
+        'allowed_origins' => [env('FRONTEND_URL', 'https://myapp.com')],
+    references:
+      - https://cwe.mitre.org/data/definitions/942.html
+
+  - id: CONFIG-002
+    title: "SSL/TLS verification disabled"
+    description: >
+      SSL peer verification is disabled in an HTTP client configuration. This
+      allows man-in-the-middle attacks by accepting any certificate, including
+      self-signed and expired ones.
+    severity: high
+    category: Configuration
+    enabled: true
+    tags: [ssl, owasp-a07, cwe-295]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '''verify''\s*=>\s*false'
+      - type: regex
+        target: php-files
+        pattern: 'CURLOPT_SSL_VERIFYPEER\s*=>\s*false'
+      - type: regex
+        target: php-files
+        pattern: 'withoutVerifying\(\)'
+    remediation: |
+      Always verify SSL certificates in production:
+        Http::withOptions(['verify' => true])->get($url);
+      If using self-signed certs in dev, gate it on the environment:
+        'verify' => app()->environment('production'),
+    references:
+      - https://cwe.mitre.org/data/definitions/295.html
+
+  - id: CONFIG-003
+    title: "Broad CSRF exception"
+    description: >
+      A wildcard or overly broad URI pattern is excluded from CSRF protection.
+      This disables Laravel's built-in CSRF token verification for matching
+      routes, exposing them to cross-site request forgery attacks.
+    severity: high
+    category: Configuration
+    enabled: true
+    tags: [csrf, owasp-a05, cwe-352]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\$except\s*=\s*\[[^\]]*\*'
+    remediation: |
+      Keep CSRF exceptions as narrow as possible:
+        protected $except = [
+            'stripe/webhook',     // specific webhook endpoint
+        ];
+      Never use 'api/*' — API routes use token auth, not CSRF.
+    references:
+      - https://cwe.mitre.org/data/definitions/352.html
+
+  - id: CONFIG-004
+    title: "Empty $guarded array on Eloquent model"
+    description: >
+      Setting $guarded = [] makes every attribute mass-assignable. An attacker
+      can inject unexpected fields (is_admin, role, email_verified_at) through
+      mass assignment via create() or update().
+    severity: high
+    category: Configuration
+    enabled: true
+    tags: [mass-assignment, owasp-a04, cwe-915]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\$guarded\s*=\s*\[\s*\]'
+    remediation: |
+      Use $fillable to explicitly list allowed fields:
+        protected $fillable = ['name', 'email', 'password'];
+      Or set $guarded to protect sensitive fields:
+        protected $guarded = ['id', 'is_admin', 'role'];
+    references:
+      - https://owasp.org/Top10/A04_2021-Insecure_Design/
+      - https://cwe.mitre.org/data/definitions/915.html
+
+  - id: CONFIG-005
+    title: "Dangerous file extensions allowed in upload"
+    description: >
+      File upload validation allows executable extensions (php, phtml, phar, sh).
+      Uploaded files with these extensions could be executed by the web server,
+      leading to remote code execution.
+    severity: critical
+    category: Configuration
+    enabled: true
+    tags: [file-upload, owasp-a04, cwe-434]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '''mimes[^'']*:(php|phtml|phar|sh|exe|bat|cmd)'
+      - type: regex
+        target: php-files
+        pattern: '(php|phtml|phar)\s*[,''"\]].*\b(upload|store|put)'
+    remediation: |
+      Only allow safe extensions in upload validation:
+        'file' => 'required|mimes:jpg,png,gif,pdf,doc,xlsx|max:10240',
+      Store uploaded files outside the web root.
+    references:
+      - https://cwe.mitre.org/data/definitions/434.html
+
+  - id: CONFIG-006
+    title: "Cookie served without secure flags"
+    description: >
+      A cookie is created without the secure and/or httponly flags. Without
+      'secure', the cookie is sent over plain HTTP. Without 'httponly',
+      JavaScript can access it (enabling theft via XSS).
+    severity: medium
+    category: Configuration
+    enabled: true
+    tags: [cookies, owasp-a05, cwe-614]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: 'setcookie\s*\([^)]*false\s*,\s*false'
+      - type: regex
+        target: php-files
+        pattern: 'Cookie::make\([^)]*false'
+    remediation: |
+      Set secure flags on all cookies:
+        cookie('name', 'value', $minutes, '/', null, true, true);
+      Or configure globally in config/session.php:
+        'secure' => env('SESSION_SECURE_COOKIE', true),
+        'http_only' => true,
+    references:
+      - https://cwe.mitre.org/data/definitions/614.html
+
+  - id: CONFIG-007
+    title: "Permissive validation — no size or type constraints"
+    description: >
+      A file upload field uses the 'file' validation rule without size limits
+      or type restrictions. This allows any file type and size, risking storage
+      abuse and malicious file uploads.
+    severity: medium
+    category: Configuration
+    enabled: true
+    tags: [file-upload, cwe-434]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '''file''\s*$'
+    remediation: |
+      Always set mimes and max size:
+        'avatar' => 'required|file|mimes:jpg,png|max:2048',

@@ -1,0 +1,115 @@
+# Ward Default Rules — Debug & Information Disclosure
+# Detects debug statements, diagnostic output, and information leaks.
+
+rules:
+  - id: DEBUG-001
+    title: "dd() call left in code"
+    description: >
+      dd() (dump and die) stops execution and dumps variable contents to the
+      browser. Left in production code, it breaks functionality and can expose
+      sensitive data structures, database contents, or environment variables.
+    severity: high
+    category: Debug
+    enabled: true
+    tags: [debug, info-disclosure, cwe-215]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\bdd\s*\('
+    remediation: |
+      Remove dd() calls before deploying:
+        Use Laravel Telescope or logging for debugging in non-local environments.
+        Log::debug('message', $context);
+    references:
+      - https://cwe.mitre.org/data/definitions/215.html
+
+  - id: DEBUG-002
+    title: "dump() call left in code"
+    description: >
+      dump() outputs variable contents to the browser without stopping execution.
+      In production this leaks internal data structures to end users.
+    severity: medium
+    category: Debug
+    enabled: true
+    tags: [debug, info-disclosure, cwe-215]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\bdump\s*\('
+    remediation: |
+      Remove dump() calls. Use Log::info() or Log::debug() for runtime inspection.
+    references:
+      - https://cwe.mitre.org/data/definitions/215.html
+
+  - id: DEBUG-003
+    title: "var_dump() or print_r() in source"
+    description: >
+      Native PHP debug functions output raw data to the browser. In production
+      these expose internal variable contents and data structures.
+    severity: medium
+    category: Debug
+    enabled: true
+    tags: [debug, info-disclosure, cwe-215]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\b(var_dump|print_r|var_export)\s*\('
+    remediation: |
+      Replace with structured logging:
+        Log::debug('variable state', ['data' => $data]);
+
+  - id: DEBUG-004
+    title: "phpinfo() exposed"
+    description: >
+      phpinfo() discloses the complete PHP configuration, including server paths,
+      loaded extensions, environment variables, and PHP settings. This is a
+      goldmine for attackers performing reconnaissance.
+    severity: high
+    category: Debug
+    enabled: true
+    tags: [info-disclosure, owasp-a05, cwe-200]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\bphpinfo\s*\('
+    remediation: |
+      Remove phpinfo() entirely. If needed for diagnostics, restrict access:
+        - Only allow in local/development environments
+        - Protect behind authentication middleware
+    references:
+      - https://cwe.mitre.org/data/definitions/200.html
+
+  - id: DEBUG-005
+    title: "Debug bar or Clockwork left enabled"
+    description: >
+      Debug toolbar packages (Laravel Debugbar, Clockwork) are useful in
+      development but expose query logs, route information, session data,
+      and request details in production.
+    severity: medium
+    category: Debug
+    enabled: true
+    tags: [info-disclosure, cwe-215]
+    patterns:
+      - type: regex
+        target: config-files
+        pattern: '''enabled''\s*=>\s*(true|env\([^)]*,\s*true\))'
+    remediation: |
+      Ensure debug tools are environment-gated:
+        'enabled' => env('DEBUGBAR_ENABLED', false),
+      And never set DEBUGBAR_ENABLED=true in production .env.
+
+  - id: DEBUG-006
+    title: "Dump statement in Blade template"
+    description: >
+      A @dump or @dd directive is present in a Blade template. These render
+      debug output directly into the HTML response in production.
+    severity: high
+    category: Debug
+    enabled: true
+    tags: [debug, info-disclosure, cwe-215]
+    patterns:
+      - type: regex
+        target: blade-files
+        pattern: '@(dd|dump)\s*\('
+    remediation: |
+      Remove @dd and @dump from templates before deploying.

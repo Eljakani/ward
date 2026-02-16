@@ -39,6 +39,8 @@ type App struct {
 	// Shared state (updated from EventBus messages)
 	projectName    string
 	laravelVersion string
+	phpVersion     string
+	packageCount   int
 	currentStage   models.PipelineStage
 	scanners       []models.ScannerInfo
 	findings       []models.Finding
@@ -198,6 +200,17 @@ func (a *App) handleBusEvent(event eventbus.Event) tea.Cmd {
 		a.scanRunning = true
 		a.projectName = data.ProjectName
 
+	case eventbus.EventContextResolved:
+		data := event.Data.(eventbus.ContextResolvedData)
+		if data.ProjectName != "" {
+			a.projectName = data.ProjectName
+		}
+		a.laravelVersion = data.LaravelVersion
+		a.phpVersion = data.PHPVersion
+		a.packageCount = data.PackageCount
+		a.scanView.UpdateProjectInfo(a.projectName, a.laravelVersion, a.phpVersion, a.packageCount)
+		a.propagateSize() // recalculate layout with info bar
+
 	case eventbus.EventStageStarted:
 		data := event.Data.(eventbus.StageStartedData)
 		a.currentStage = data.Stage
@@ -271,8 +284,11 @@ func (a *App) updateScannerStatus(name string, status models.ScannerStatus, find
 }
 
 func (a *App) propagateSize() {
-	headerH := 1
-	footerH := 2
+	// Use actual rendered heights for accurate layout
+	header := a.renderHeader()
+	footer := a.renderFooter()
+	headerH := lipgloss.Height(header)
+	footerH := lipgloss.Height(footer)
 	contentH := a.height - headerH - footerH
 	if contentH < 4 {
 		contentH = 4
@@ -302,6 +318,8 @@ func (a *App) renderHeader() string {
 	data := components.HeaderData{
 		ProjectName:    a.projectName,
 		LaravelVersion: a.laravelVersion,
+		PHPVersion:     a.phpVersion,
+		PackageCount:   a.packageCount,
 		ToolVersion:    version,
 		ScanRunning:    a.scanRunning,
 		ScanComplete:   a.scanComplete,

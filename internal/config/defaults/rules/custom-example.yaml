@@ -1,0 +1,63 @@
+# Custom Rules — Example Template
+#
+# This file demonstrates how to write your own Ward rules.
+# All .yaml files in ~/.ward/rules/ are loaded automatically.
+#
+# These example rules are disabled by default. Set enabled: true to activate.
+#
+# Pattern types:
+#   regex       — Match a regular expression against file contents (line by line)
+#   contains    — Match an exact substring in file contents
+#   file-exists — Check whether a file matching the glob exists
+#
+# Target types:
+#   php-files        — All .php files (recursive, skips vendor/)
+#   blade-files      — resources/views/**/*.blade.php
+#   config-files     — config/*.php
+#   env-files        — .env, .env.*
+#   routes-files     — routes/*.php
+#   migration-files  — database/migrations/*.php
+#   js-files         — resources/js/**/*.{js,ts,jsx,tsx}
+#   path/to/*.ext    — Any custom glob pattern
+#
+# Special options:
+#   negative: true   — Trigger the finding when the pattern is NOT found
+
+rules:
+  - id: MY-001
+    title: "Example: Hardcoded internal URL"
+    description: "Detects hardcoded internal URLs that should use configuration."
+    severity: low
+    category: Configuration
+    enabled: false
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: 'https?://localhost:\d{4}'
+    remediation: |
+      Replace hardcoded URLs with environment variables:
+        $url = env('INTERNAL_SERVICE_URL');
+
+  - id: MY-002
+    title: "Example: Missing CSRF directive in Blade form"
+    description: >
+      A <form> tag in a Blade template does not include @csrf.
+      This rule uses the 'negative' option — it triggers when @csrf is absent
+      from a file that contains a <form> tag.
+    severity: medium
+    category: Configuration
+    enabled: false
+    patterns:
+      - type: contains
+        target: blade-files
+        pattern: "<form"
+      - type: contains
+        target: blade-files
+        pattern: "@csrf"
+        negative: true
+    remediation: |
+      Add @csrf inside every Blade form:
+        <form method="POST" action="/profile">
+            @csrf
+            ...
+        </form>

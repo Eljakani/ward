@@ -12,6 +12,8 @@ import (
 type HeaderData struct {
 	ProjectName    string
 	LaravelVersion string
+	PHPVersion     string
+	PackageCount   int
 	ToolVersion    string
 	ScanRunning    bool
 	ScanComplete   bool
@@ -38,6 +40,16 @@ func RenderHeader(data HeaderData, t *theme.Theme, width int) string {
 		laravel = t.HeaderBar.Render(fmt.Sprintf("Laravel %s", data.LaravelVersion))
 	}
 
+	php := ""
+	if data.PHPVersion != "" {
+		php = t.HeaderBar.Render(fmt.Sprintf("PHP %s", data.PHPVersion))
+	}
+
+	packages := ""
+	if data.PackageCount > 0 {
+		packages = t.HeaderBar.Render(fmt.Sprintf("%d packages", data.PackageCount))
+	}
+
 	version := t.HeaderBar.Render(fmt.Sprintf("v%s", data.ToolVersion))
 
 	var status string
@@ -62,6 +74,12 @@ func RenderHeader(data HeaderData, t *theme.Theme, width int) string {
 	}
 	if laravel != "" {
 		leftParts = append(leftParts, sep, laravel)
+	}
+	if php != "" {
+		leftParts = append(leftParts, sep, php)
+	}
+	if packages != "" {
+		leftParts = append(leftParts, sep, packages)
 	}
 	leftParts = append(leftParts, sep, version)
 	left := lipgloss.JoinHorizontal(lipgloss.Center, leftParts...)

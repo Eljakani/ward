@@ -1,9 +1,14 @@
 package config
 
 import (
+	"embed"
 	"fmt"
 	"os"
+	"path/filepath"
 )
+
+//go:embed defaults/rules/*.yaml
+var defaultRulesFS embed.FS
 
 const defaultConfigYAML = `# Ward configuration
 # https://github.com/eljakani/ward
@@ -13,8 +18,11 @@ severity: info
 
 output:
   formats:
-    - terminal
-  # dir: ./reports
+    - json
+    - sarif
+    - html
+    - markdown
+  dir: .
 
 scanners:
   # enable: []   # if empty, all scanners run
@@ -35,43 +43,6 @@ ai:
 
 providers:
   git_depth: 1
-`
-
-const exampleRulesYAML = `# Example custom rules for Ward
-# Place .yaml files in this directory to add your own rules.
-# Ward loads all .yaml/.yml files from ~/.ward/rules/ automatically.
-
-rules:
-  - id: CUSTOM-001
-    title: "Hardcoded internal API key"
-    description: "Detects hardcoded internal API keys in source files."
-    severity: high
-    category: secrets
-    enabled: true
-    tags:
-      - secrets
-      - cwe-798
-    patterns:
-      - type: regex
-        target: php-files
-        pattern: 'INTERNAL_API_KEY\s*=\s*[''"][a-zA-Z0-9]+'
-    remediation: |
-      Move API keys to environment variables.
-      Use .env files or a secrets manager instead of hardcoding keys.
-    references:
-      - https://cwe.mitre.org/data/definitions/798.html
-
-  # - id: CUSTOM-002
-  #   title: "Your rule title"
-  #   description: "What this rule checks for."
-  #   severity: medium
-  #   category: config
-  #   enabled: true
-  #   patterns:
-  #     - type: regex
-  #       target: config-files
-  #       pattern: 'some_pattern'
-  #   remediation: "How to fix it."
 `
 
 // Init creates the ~/.ward directory structure with default files.
@@ -95,14 +66,31 @@ func Init(force bool) (string, error) {
 		return "", fmt.Errorf("writing config.yaml: %w", err)
 	}
 
+	// Copy all embedded default rules to ~/.ward/rules/
 	rulesDir, err := RulesDir()
 	if err != nil {
 		return "", err
 	}
 
-	examplePath := rulesDir + "/example.yaml"
-	if err := writeIfMissing(examplePath, exampleRulesYAML, force); err != nil {
-		return "", fmt.Errorf("writing example rules: %w", err)
+	entries, err := defaultRulesFS.ReadDir("defaults/rules")
+	if err != nil {
+		return "", fmt.Errorf("reading embedded rules: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		content, err := defaultRulesFS.ReadFile("defaults/rules/" + entry.Name())
+		if err != nil {
+			return "", fmt.Errorf("reading embedded rule %s: %w", entry.Name(), err)
+		}
+
+		targetPath := filepath.Join(rulesDir, entry.Name())
+		if err := writeIfMissing(targetPath, string(content), force); err != nil {
+			return "", fmt.Errorf("writing rule %s: %w", entry.Name(), err)
+		}
 	}
 
 	return dir, nil

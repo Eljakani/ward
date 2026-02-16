@@ -17,3 +17,5 @@ vendor/
 
 # Claude Code
 .claude/
+
+ward-report.*

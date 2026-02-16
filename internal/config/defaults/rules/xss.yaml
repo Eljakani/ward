@@ -1,0 +1,92 @@
+# Ward Default Rules — Cross-Site Scripting (XSS)
+# Detects unescaped output and unsafe rendering in Blade templates and PHP.
+
+rules:
+  - id: XSS-001
+    title: "Unescaped Blade output {!! !!}"
+    description: >
+      The {!! !!} syntax renders raw HTML without escaping. If the value contains
+      user-controlled data, this creates a stored or reflected XSS vulnerability.
+      Use {{ }} which auto-escapes via htmlspecialchars().
+    severity: medium
+    category: XSS
+    enabled: true
+    tags: [xss, owasp-a07, cwe-79]
+    patterns:
+      - type: regex
+        target: blade-files
+        pattern: '\{!!\s*\$'
+    remediation: |
+      Use escaped output:
+        {{ $variable }}        — auto-escapes HTML entities
+      If raw HTML is truly needed, sanitize first:
+        {!! clean($variable) !!}   — use HTMLPurifier or similar
+    references:
+      - https://owasp.org/Top10/A07_2021-Cross-Site_Scripting/
+      - https://cwe.mitre.org/data/definitions/79.html
+
+  - id: XSS-002
+    title: "Unescaped Blade output with request data"
+    description: >
+      Raw Blade output ({!! !!}) is used with request() or $request data.
+      This directly renders user input as HTML without sanitization, enabling XSS.
+    severity: high
+    category: XSS
+    enabled: true
+    tags: [xss, owasp-a07, cwe-79]
+    patterns:
+      - type: regex
+        target: blade-files
+        pattern: '\{!!\s*(request\(|old\(|\$request->)'
+    remediation: |
+      Never render user input as raw HTML. Use escaped output:
+        {{ request('name') }}
+        {{ old('name') }}
+    references:
+      - https://cwe.mitre.org/data/definitions/79.html
+
+  - id: XSS-003
+    title: "JavaScript variable from unescaped PHP"
+    description: >
+      A PHP variable is interpolated into a JavaScript block without using
+      @json or proper encoding, which can lead to XSS if the value contains
+      user data.
+    severity: medium
+    category: XSS
+    enabled: true
+    tags: [xss, cwe-79]
+    patterns:
+      - type: regex
+        target: blade-files
+        pattern: '<script[^>]*>.*\{\{\s*\$.*\}\}.*</script>'
+      - type: regex
+        target: blade-files
+        pattern: 'var\s+\w+\s*=\s*[''"]?\{\{[^}]*\}\}[''"]?'
+    remediation: |
+      Use @json to safely embed PHP data in JavaScript:
+        <script>
+          var data = @json($data);
+        </script>
+      Or use a data attribute:
+        <div data-config="{{ json_encode($config) }}">
+    references:
+      - https://cwe.mitre.org/data/definitions/79.html
+
+  - id: XSS-004
+    title: "Response without content type or with text/html on raw content"
+    description: >
+      Returning a response with raw user content and text/html content type
+      (or no explicit content type) can lead to XSS if the response body
+      includes unsanitized user input.
+    severity: medium
+    category: XSS
+    enabled: true
+    tags: [xss, cwe-79]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: 'response\(\s*\$.*text/html'
+    remediation: |
+      Set appropriate content types for non-HTML responses:
+        return response($data)->header('Content-Type', 'application/json');
+      For HTML responses, ensure data is escaped.

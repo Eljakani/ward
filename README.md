@@ -13,8 +13,6 @@
 
 Ward understands your Laravel application — its routes, models, controllers, middleware, Blade templates, config files, `.env` secrets, Composer dependencies, and more. It doesn't just grep for patterns. It resolves your project's structure first, then runs targeted security checks against it.
 
-> **Status:** Early development. The TUI, event system, config layer, and core architecture are in place. Scanner implementations are coming next.
-
 ---
 
 ## Why Ward?
@@ -39,36 +37,25 @@ Ward checks for all of these and more. It's designed to fit into the workflow yo
 Ward scans your project in a pipeline of five stages:
 
 ```
- ✓ Provider  →  ✓ Resolvers  →  ● Scanners  →  ○ Post-Process  →  ○ Report
+ Provider  -->  Resolvers  -->  Scanners  -->  Post-Process  -->  Report
 ```
 
-**1. Provider** — Locates and prepares your project source (local path, git clone, or archive).
+**1. Provider** — Locates and prepares your project source. Supports local paths and git URLs (shallow clone).
 
-**2. Resolvers** — Parses your Laravel project and builds a structured context: routes with their middleware, models with `$fillable`/`$guarded`/`$casts`, controllers with authorization calls, config values, `.env` variables, Blade templates, service providers, and more. This happens once and every scanner benefits from it.
+**2. Resolvers** — Parses `composer.json`, `composer.lock`, `.env`, and `config/*.php` to build a structured project context: framework version, PHP version, installed packages, environment variables, config files.
 
-**3. Scanners** — Independent security checks run against the resolved context. Each scanner focuses on a category (auth, injection, config, dependencies, etc.) and produces findings. Scanners run in parallel where possible.
+**3. Scanners** — Independent security checks run against the resolved context:
 
-**4. Post-Process** — Deduplicates findings, applies your ignore rules, diffs against a previous baseline, and scores results.
+| Scanner | What it checks |
+|---------|---------------|
+| `env-scanner` | `.env` misconfigurations — debug mode, empty APP_KEY, non-production env, weak credentials, leaked secrets in `.env.example` |
+| `config-scanner` | `config/*.php` — hardcoded debug mode, session cookie flags, CORS wildcards, hardcoded credentials in config files |
+| `dependency-scanner` | `composer.lock` — **live CVE lookup** via [OSV.dev](https://osv.dev) against the entire Packagist advisory database (no hardcoded list, always up-to-date) |
+| `rules-scanner` | 42 built-in YAML rules covering secrets, SQL/command/code injection, XSS, debug artifacts, weak crypto, auth issues, mass assignment, unsafe file uploads |
 
-**5. Report** — Generates output in your chosen format (terminal, JSON, SARIF, HTML, Markdown) and persists results for trending.
+**4. Post-Process** — Deduplicates findings, filters by minimum severity (from config), and diffs against your last scan to show what's new vs resolved.
 
-The key insight: scanners don't parse PHP themselves. When the auth scanner wants to know "does this controller method have authorization?", it reads the already-resolved context. The parsing happened upstream, once, and is shared.
-
----
-
-## What Ward Checks
-
-| Category | Examples |
-|----------|---------|
-| **Environment & Secrets** | `APP_DEBUG` in production, weak `APP_KEY`, credentials in `.env.example`, exposed API keys |
-| **Configuration** | Session cookies missing `Secure`/`HttpOnly`, permissive CORS, weak bcrypt rounds, insecure mail config |
-| **Authentication & Authorization** | Controller methods without authorization, missing `auth` middleware on API routes, no rate limiting on login |
-| **Mass Assignment** | Models with `$guarded = []`, sensitive fields not in `$hidden`, unprotected `$fillable` |
-| **Injection** | SQL injection via `DB::raw()`, command injection via `exec()`/`system()`, open redirects |
-| **Cross-Site Scripting** | `{!! !!}` on user data in Blade, unescaped JS injection, missing CSP headers |
-| **Dependencies** | Known CVEs in Composer and npm packages, outdated frameworks |
-| **Cryptography** | Weak hashing, insecure encryption config, hardcoded secrets |
-| **Infrastructure** | Unsafe scheduled tasks, debug routes in production, missing security headers |
+**5. Report** — Generates output in multiple formats and saves scan history for trending.
 
 ---
 
@@ -83,7 +70,7 @@ go install github.com/eljakani/ward@latest
 Or build from source:
 
 ```bash
-git clone https://github.com/eljakani/ward.git
+git clone https://github.com/Eljakani/ward.git
 cd ward
 go build -o ward .
 ```
@@ -94,101 +81,188 @@ go build -o ward .
 ward init
 ```
 
-This creates `~/.ward/` with your configuration:
+This creates `~/.ward/` with your configuration and 42 default security rules:
 
 ```
 ~/.ward/
-├── config.yaml          # Main configuration
-├── rules/               # Custom rule definitions (YAML)
-│   └── example.yaml     # Documented example rule
-├── reports/             # Scan report output
-└── store/               # Result persistence for trending
+├── config.yaml            # Main configuration
+├── rules/                 # Security rules (YAML)
+│   ├── secrets.yaml       # 7 rules: hardcoded passwords, API keys, AWS creds, JWT, tokens
+│   ├── injection.yaml     # 6 rules: SQL injection, command injection, eval, unserialize
+│   ├── xss.yaml           # 4 rules: unescaped Blade output, JS injection
+│   ├── debug.yaml         # 6 rules: dd(), dump(), phpinfo(), debug bars
+│   ├── crypto.yaml        # 5 rules: md5, sha1, rand(), mcrypt, base64-as-encryption
+│   ├── security-config.yaml # 7 rules: CORS, SSL verify, CSRF, mass assignment, uploads
+│   ├── auth.yaml          # 5 rules: missing middleware, rate limiting, loginUsingId
+│   └── custom-example.yaml # Disabled template showing how to write your own rules
+├── reports/               # Scan report output
+└── store/                 # Scan history for diffing between runs
 ```
 
-### Scan
+### Scan a Local Project
 
 ```bash
 ward scan /path/to/your/laravel-project
 ```
 
-Ward opens an interactive terminal UI showing real-time progress, scanner status, and findings as they're discovered. When the scan completes, it transitions to a results view where you can browse, sort, and inspect each finding.
+### Scan a Remote Repository
+
+```bash
+ward scan https://github.com/user/laravel-project.git
+```
+
+### Headless Mode (CI)
+
+```bash
+ward scan ./my-app --output json
+```
+
+When no TTY is available or `--output` is specified, Ward runs in headless mode with styled text output — no interactive TUI.
+
+---
+
+## Report Formats
+
+Configure output formats in `~/.ward/config.yaml`:
+
+```yaml
+output:
+  formats:
+    - json       # ward-report.json  — machine-readable
+    - sarif      # ward-report.sarif — GitHub Code Scanning / IDE integration
+    - html       # ward-report.html  — standalone visual report (dark theme)
+    - markdown   # ward-report.md    — text-based, great for PRs
+  dir: ./reports
+```
+
+JSON is always generated as a baseline. All report files are written to the configured output directory (defaults to `.`).
+
+### GitHub Code Scanning Integration
+
+Add the SARIF format and upload it in your CI workflow:
+
+```yaml
+- name: Run Ward
+  run: ward scan . --output json
+
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: ward-report.sarif
+```
+
+See `.github/workflows/ward.yml` for a complete example.
 
 ---
 
 ## Configuration
 
-Ward loads its config from `~/.ward/config.yaml`. Run `ward init` to generate one with documented defaults, or create it manually:
+Ward loads its config from `~/.ward/config.yaml`:
 
 ```yaml
 # Minimum severity to report: info, low, medium, high, critical
 severity: info
 
 output:
-  formats:
-    - terminal        # interactive TUI
-    # - json          # machine-readable
-    # - sarif         # IDE/GitHub integration
-    # - html          # shareable report
-  # dir: ./reports    # where file reports are written
+  formats: [json, sarif, html, markdown]
+  dir: ./reports
 
 scanners:
-  # enable: []        # if empty, all scanners run
-  disable: []         # scanner names to skip, e.g. ["dep-scanner"]
+  disable: []     # scanner names to skip, e.g. ["dependency-scanner"]
 
 rules:
-  disable: []         # rule IDs to silence, e.g. ["ENV-001", "AUTH-005"]
-  override:           # change severity for specific rules
-    # ENV-001:
-    #   severity: medium
-  # custom_dirs:      # load rules from additional directories
+  disable: []     # rule IDs to silence, e.g. ["DEBUG-001", "AUTH-001"]
+  override:       # change severity for specific rules
+    DEBUG-002:
+      severity: low
+  # custom_dirs:  # load rules from additional directories
   #   - /path/to/team-rules
 
-ai:
-  enabled: false
-  provider: openai    # openai, anthropic, ollama
-  model: gpt-4o
-  # api_key: sk-...   # or set WARD_AI_API_KEY env var
-  # endpoint: http://localhost:11434  # for ollama
-
 providers:
-  git_depth: 1        # shallow clone depth (0 = full history)
+  git_depth: 1    # shallow clone depth (0 = full history)
 ```
-
-### Per-Project Config
-
-You can also place a `.ward.yaml` file in your Laravel project root. Ward merges it on top of the global config, so teams can commit shared settings (disabled rules, severity overrides) alongside their code.
 
 ---
 
 ## Custom Rules
 
-Drop `.yaml` files into `~/.ward/rules/` and Ward picks them up automatically. Each file contains a list of rules:
+Drop `.yaml` files into `~/.ward/rules/` and Ward picks them up automatically. See `custom-example.yaml` for a documented template.
 
 ```yaml
 rules:
-  - id: CUSTOM-001
-    title: "Hardcoded internal API key"
-    description: "Detects hardcoded internal API keys in source files."
-    severity: high
-    category: secrets
+  - id: TEAM-001
+    title: "Hardcoded internal service URL"
+    description: "Detects hardcoded URLs to internal services."
+    severity: medium
+    category: Configuration
     enabled: true
-    tags:
-      - secrets
-      - cwe-798
     patterns:
       - type: regex
         target: php-files
-        pattern: 'INTERNAL_API_KEY\s*=\s*[''"][a-zA-Z0-9]+'
+        pattern: 'https?://internal-service\.\w+'
     remediation: |
-      Move API keys to environment variables.
-      Use .env files or a secrets manager instead of hardcoding keys.
-    references:
-      - https://cwe.mitre.org/data/definitions/798.html
+      Use environment variables:
+        $url = env('INTERNAL_SERVICE_URL');
 ```
 
-**Pattern types:** `regex`, `contains`, `file-exists`
-**Targets:** `php-files`, `blade-files`, `config-files`, `env-files`
-**Setting `negative: true`** fires the rule when the pattern is *absent* (useful for "must have X" checks).
+### Pattern Types
+
+| Type | Description |
+|------|-------------|
+| `regex` | Regular expression match (line-by-line) |
+| `contains` | Exact substring match |
+| `file-exists` | Check if a file matching the glob exists |
+
+### Targets
+
+| Target | Files matched |
+|--------|--------------|
+| `php-files` | All `.php` files (recursive, skips `vendor/`) |
+| `blade-files` | `resources/views/**/*.blade.php` |
+| `config-files` | `config/*.php` |
+| `env-files` | `.env`, `.env.*` |
+| `routes-files` | `routes/*.php` |
+| `migration-files` | `database/migrations/*.php` |
+| `js-files` | `resources/js/**/*.{js,ts,jsx,tsx}` |
+| `path/to/*.ext` | Any custom glob pattern |
+
+### Negative Patterns
+
+Set `negative: true` to trigger when a pattern is **absent** — useful for "must have X" checks:
+
+```yaml
+patterns:
+  - type: contains
+    target: blade-files
+    pattern: "@csrf"
+    negative: true    # fire if @csrf is NOT found
+```
+
+### Rule Overrides
+
+Disable or change severity of any rule in `config.yaml` without editing rule files:
+
+```yaml
+rules:
+  disable: [DEBUG-001, DEBUG-002]
+  override:
+    CRYPTO-003:
+      severity: low
+    AUTH-001:
+      enabled: false
+```
+
+---
+
+## Scan History
+
+Ward automatically saves each scan to `~/.ward/store/`. On subsequent scans of the same project, it shows what changed:
+
+```
+  [info] vs last scan: 2 new, 3 resolved (12->11)
+```
+
+This lets you track security posture over time and catch regressions.
 
 ---
 
@@ -198,55 +272,11 @@ Ward's TUI is built on [Bubble Tea](https://github.com/charmbracelet/bubbletea) 
 
 ### Scan View
 
-Displayed while scanning is in progress:
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│  WARD  | Project: myapp | Laravel 11.x | v0.1.0          SCANNING  │
-├──────────────────────────────────────────────────────────────────────┤
-│     ✓ Provider  →  ✓ Resolvers  →  ● Scanners  →  ○ Post  →  ○ Rpt│
-│──────────────────────────────────────────────────────────────────────│
-│  Critical: 2    High: 5    Medium: 12    Low: 3    Info: 8          │
-│──────────────────────────────────────────────────────────────────────│
-│  Scanners              │  Event Log                                  │
-│  ✓ env-scanner    (3)  │  15:04:01 ● Stage started: Scanners        │
-│  ⠋ auth-scanner        │  15:04:02 ▸ Scanner started: auth-scanner  │
-│  ○ injection-scanner   │  15:04:03 ▲ Finding: Weak password policy  │
-│  ○ xss-scanner         │  15:04:04 ▲ Finding: Missing CSRF token    │
-│  ○ dep-scanner         │  15:04:05 ✓ Scanner completed: csrf-scan   │
-├──────────────────────────────────────────────────────────────────────┤
-│  ? help  q quit  tab results                                        │
-└──────────────────────────────────────────────────────────────────────┘
-```
+Displayed while scanning is in progress — shows pipeline stage progress, scanner status with spinners, live severity counts, and a scrollable event log.
 
 ### Results View
 
-Displayed after scan completion:
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│  WARD  | Project: myapp | Laravel 11.x | v0.1.0         COMPLETE   │
-├──────────────────────────────────────────────────────────────────────┤
-│              Scan Complete — 30 findings in 4.2s                     │
-│  Critical: 2    High: 5    Medium: 12    Low: 3    Info: 8          │
-│──────────────────────────────────────────────────────────────────────│
-│  Sev      Category     Title          │  CRITICAL  Mass assignment  │
-│ ─────────────────────────────────────  │  Category: Authorization   │
-│ >CRITICAL Auth         Mass assignm.  │  Scanner: auth-scanner     │
-│  CRITICAL Injection    SQL injection.  │                             │
-│  HIGH     Auth         Missing auth.  │  Description                │
-│  HIGH     XSS          Unescaped ou.  │  The Product model uses     │
-│  MEDIUM   Config       Debug mode e.  │  $guarded = [] which        │
-│  MEDIUM   Config       Session cook.  │  disables mass assignment   │
-│  LOW      Deps         Outdated lod.  │  protection entirely...     │
-│  INFO     Headers      Missing CSP .  │                             │
-│                                       │  Remediation                │
-│                                       │  Use $fillable to whitelist │
-│                                       │  assignable fields.         │
-├──────────────────────────────────────────────────────────────────────┤
-│  ? help  q quit  tab panel  s sort  esc back                        │
-└──────────────────────────────────────────────────────────────────────┘
-```
+Displayed after scan completion — sortable findings table with severity badges, category grouping, and a detail panel showing description, code snippet, remediation, and references.
 
 ### Keyboard Shortcuts
 
@@ -261,14 +291,92 @@ Displayed after scan completion:
 
 ---
 
+## CI Integration
+
+### GitHub Actions
+
+Copy `.github/workflows/ward.yml` to your Laravel project:
+
+```yaml
+name: Ward Security Scan
+on: [push, pull_request]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ward
+        run: go install github.com/eljakani/ward@latest
+
+      - name: Run Ward
+        run: ward init && ward scan . --output json
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ward-report.sarif
+```
+
+### GitLab CI
+
+```yaml
+ward-scan:
+  image: golang:latest
+  script:
+    - go install github.com/eljakani/ward@latest
+    - ward init && ward scan . --output json
+  artifacts:
+    paths:
+      - ward-report.*
+    when: always
+```
+
+---
+
+## Built-in Scanners
+
+### env-scanner (8 checks)
+
+| ID | Check | Severity |
+|----|-------|----------|
+| ENV-001 | Missing `.env` file | Info |
+| ENV-002 | `APP_DEBUG=true` | High |
+| ENV-003 | Empty or missing `APP_KEY` | Critical |
+| ENV-004 | Weak/default `APP_KEY` | Critical |
+| ENV-005 | Non-production `APP_ENV` | Medium |
+| ENV-006 | Empty `DB_PASSWORD` | Low |
+| ENV-007 | File sessions in production | Low |
+| ENV-008 | Real credentials in `.env.example` | Medium |
+
+### config-scanner (13 checks)
+
+Checks `config/app.php`, `auth.php`, `session.php`, `mail.php`, `cors.php`, `database.php`, `broadcasting.php`, and `logging.php` for hardcoded secrets, insecure defaults, and missing security flags.
+
+### dependency-scanner (live CVE database)
+
+Reads your `composer.lock` as an SBOM and queries the [OSV.dev](https://osv.dev) vulnerability database in real time. Every Packagist package is checked — no hardcoded advisory list. This covers the entire PHP/Composer ecosystem: Laravel, Symfony, Guzzle, Doctrine, Monolog, Livewire, Filament, and every other dependency in your lock file.
+
+Requires network access. Results include CVE IDs, severity, affected version ranges, fixed versions, and remediation commands.
+
+### rules-scanner (42 default rules)
+
+Pattern-based checks loaded from `~/.ward/rules/*.yaml` covering secrets, injection, XSS, debug, crypto, config, and auth categories.
+
+---
+
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `ward` | Show banner and usage |
-| `ward init` | Create `~/.ward/` with default config and example rules |
+| `ward init` | Create `~/.ward/` with default config and 42 security rules |
 | `ward init --force` | Recreate config files (overwrites existing) |
-| `ward scan <path>` | Scan a Laravel project |
+| `ward scan <path>` | Scan a local Laravel project |
+| `ward scan <git-url>` | Clone and scan a remote repository |
+| `ward scan <path> --output json` | Run in headless mode (no TUI) |
 | `ward version` | Print version |
 
 ---
@@ -276,95 +384,109 @@ Displayed after scan completion:
 ## Architecture
 
 ```
-CLI (cobra)  →  Orchestrator  →  Provider → Resolvers → Scanners → Post-Process → Report
-                     ↕                                       ↕
-                 EventBus  ←──────────────────────────── findings
-                     ↓
-                TUI (Bubble Tea)
+CLI (cobra)  -->  Orchestrator  -->  Provider --> Resolvers --> Scanners --> Post-Process --> Report
+                       |                                           |
+                   EventBus  <-------------------------------- findings
+                       |
+                  TUI (Bubble Tea)
 ```
 
-The codebase follows a fully decoupled, plugin-style design:
-
-- **Interface-first** — every major component (Scanner, Provider, Reporter, Store) is a Go interface. Swap any implementation without touching consumers.
-- **Event-driven** — scanners emit findings through an event bus. The TUI subscribes to it. Neither knows about the other.
-- **Shared context, private logic** — resolvers build a `ProjectContext` once, scanners read it. No scanner parses PHP on its own.
-- **Configuration as data** — rules are YAML, not code. Adding a rule never requires recompilation.
+- **Interface-first** — every component (Scanner, Provider, Reporter, Resolver) is a Go interface
+- **Event-driven** — scanners emit findings through the event bus; the TUI subscribes to it
+- **Shared context** — resolvers build a `ProjectContext` once; all scanners consume it
+- **Rules as data** — YAML rules, no recompilation needed
 
 ## Project Structure
 
 ```
 ward/
 ├── main.go
-├── cmd/
-│   ├── root.go              # Root command, banner, usage
-│   ├── init.go              # ward init
-│   ├── scan.go              # ward scan <path>
-│   └── version.go           # ward version
+├── cmd/                           # CLI commands
+│   ├── root.go
+│   ├── init.go
+│   ├── scan.go
+│   └── version.go
+├── .github/workflows/ward.yml     # CI template
 └── internal/
-    ├── config/              # Configuration system
-    │   ├── dirs.go          # ~/.ward/ directory management
-    │   ├── config.go        # WardConfig struct, Load(), Save()
-    │   ├── rules.go         # Rule loading from YAML, overrides
-    │   └── init.go          # Scaffold ~/.ward/ with defaults
-    ├── models/              # Shared types (contract layer)
-    │   ├── severity.go      # Info → Critical enum
-    │   ├── finding.go       # Security finding
-    │   ├── context.go       # ProjectContext
-    │   ├── report.go        # ScanReport
-    │   ├── scanner.go       # Scanner interface
-    │   └── pipeline.go      # Pipeline stages
-    ├── eventbus/            # Decoupled event system
-    │   ├── events.go        # 13 event types + payloads
-    │   ├── bus.go           # Thread-safe pub/sub
-    │   └── bridge.go        # EventBus → Bubble Tea adapter
-    └── tui/                 # Terminal UI
-        ├── app.go           # Root Bubble Tea model
-        ├── messages.go      # Internal TUI messages
-        ├── keymap.go        # Key bindings
+    ├── config/                    # Configuration system
+    │   ├── config.go              # WardConfig, Load(), Save()
+    │   ├── dirs.go                # ~/.ward/ directory management
+    │   ├── rules.go               # YAML rule loading + overrides
+    │   ├── init.go                # Scaffold with //go:embed defaults
+    │   └── defaults/rules/        # 8 embedded YAML rule files
+    ├── models/                    # Shared types
+    │   ├── severity.go
+    │   ├── finding.go
+    │   ├── context.go
+    │   ├── report.go
+    │   ├── scanner.go
+    │   └── pipeline.go
+    ├── eventbus/                  # Event system
+    │   ├── events.go
+    │   ├── bus.go
+    │   └── bridge.go
+    ├── provider/                  # Source providers
+    │   ├── provider.go            # Interface
+    │   ├── local.go               # Local filesystem
+    │   └── git.go                 # Git clone
+    ├── resolver/                  # Context resolvers
+    │   ├── resolver.go            # Interface
+    │   ├── framework.go           # composer.json + .env
+    │   └── package.go             # composer.lock
+    ├── scanner/                   # Security scanners
+    │   ├── env/scanner.go         # .env checks
+    │   ├── configscan/scanner.go  # config/*.php checks
+    │   ├── dependency/scanner.go  # CVE advisory checks
+    │   └── rules/scanner.go       # YAML rule engine
+    ├── reporter/                  # Report generators
+    │   ├── reporter.go            # Interface
+    │   ├── json.go
+    │   ├── sarif.go
+    │   ├── html.go
+    │   └── markdown.go
+    ├── orchestrator/              # Pipeline coordinator
+    │   └── orchestrator.go
+    ├── store/                     # Scan history
+    │   └── store.go
+    └── tui/                       # Terminal UI
+        ├── app.go
         ├── banner/
-        │   └── banner.go    # ASCII art logo with gradient
         ├── theme/
-        │   └── theme.go     # Adaptive color palette + styles
         ├── components/
-        │   ├── header.go
-        │   ├── footer.go
-        │   ├── stageprogress.go
-        │   ├── scannerpanel.go
-        │   ├── livestats.go
-        │   ├── eventlog.go
-        │   ├── severitybadge.go
-        │   └── findingdetail.go
         └── views/
-            ├── scan.go      # Scanning-in-progress view
-            └── results.go   # Post-scan results view
 ```
 
 ---
 
 ## Requirements
 
-- Go 1.25+
+- Go 1.22+
+- Git (for scanning remote repositories)
 
 ---
 
 ## Roadmap
 
 - [x] Interactive terminal UI with real-time progress
-- [x] Event-driven architecture (scanners decoupled from UI)
+- [x] Event-driven architecture
 - [x] Configuration system (`~/.ward/config.yaml`)
 - [x] Custom YAML rules (`~/.ward/rules/*.yaml`)
-- [ ] Source providers (local, git, archive)
-- [ ] Context resolvers (routes, models, controllers, middleware, Blade, config, .env)
-- [ ] Scanner implementations (env, config, auth, injection, XSS, deps, crypto, infra)
-- [ ] Built-in rule library (100+ rules)
-- [ ] Report generation (JSON, SARIF, HTML, Markdown)
-- [ ] Result store (SQLite) for trending and baseline diffs
-- [ ] Policy engine for CI pass/fail thresholds
+- [x] 42 built-in security rules across 7 categories
+- [x] Source providers (local filesystem, git clone)
+- [x] Context resolvers (composer.json, composer.lock, .env, config files)
+- [x] Scanners: env, config, dependency (15 CVEs), rules engine
+- [x] Report generation: JSON, SARIF, HTML, Markdown
+- [x] Scan history with diff between runs
+- [x] Severity filtering
+- [x] CI integration (GitHub Actions, GitLab CI)
 - [ ] Per-project `.ward.yaml` config
 - [ ] AI-assisted scanning
+- [ ] Policy engine for CI pass/fail thresholds
+- [ ] More resolvers (routes, models, controllers, middleware)
+- [ ] PHP AST-based scanning
 
 ---
 
 ## License
 
-TBD
+MIT

@@ -1,0 +1,109 @@
+# Ward Default Rules — Cryptography
+# Detects weak hashing, insecure random generation, and deprecated crypto functions.
+
+rules:
+  - id: CRYPTO-001
+    title: "md5() used for hashing"
+    description: >
+      md5() is cryptographically broken — collisions can be generated in seconds.
+      It must not be used for password hashing, integrity checks, or any
+      security-sensitive operation.
+    severity: high
+    category: Cryptography
+    enabled: true
+    tags: [crypto, owasp-a02, cwe-328]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\bmd5\s*\('
+    remediation: |
+      For passwords: use Hash::make() (bcrypt/argon2)
+        $hash = Hash::make($password);
+      For integrity: use hash('sha256', $data) or HMAC
+        $hash = hash_hmac('sha256', $data, $key);
+    references:
+      - https://cwe.mitre.org/data/definitions/328.html
+
+  - id: CRYPTO-002
+    title: "sha1() used for security purposes"
+    description: >
+      SHA-1 is considered weak — practical collision attacks exist. While less
+      broken than MD5, it should not be used for security-sensitive operations
+      like password hashing or token generation.
+    severity: medium
+    category: Cryptography
+    enabled: true
+    tags: [crypto, cwe-328]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\bsha1\s*\('
+    remediation: |
+      Use SHA-256 or stronger:
+        hash('sha256', $data)
+      For passwords, always use Hash::make().
+    references:
+      - https://cwe.mitre.org/data/definitions/328.html
+
+  - id: CRYPTO-003
+    title: "Weak random number generation"
+    description: >
+      rand() and mt_rand() are not cryptographically secure. Using them for
+      tokens, passwords, OTPs, or nonces makes these values predictable.
+    severity: high
+    category: Cryptography
+    enabled: true
+    tags: [crypto, cwe-330]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\b(rand|mt_rand|array_rand)\s*\('
+    remediation: |
+      Use cryptographically secure alternatives:
+        random_int($min, $max)         // secure integer
+        Str::random(40)                // secure string (Laravel)
+        random_bytes(32)               // secure raw bytes
+    references:
+      - https://cwe.mitre.org/data/definitions/330.html
+
+  - id: CRYPTO-004
+    title: "Deprecated mcrypt functions"
+    description: >
+      mcrypt_* functions were removed in PHP 7.2. They use outdated algorithms
+      and padding schemes. Any code still referencing them will fail on modern PHP.
+    severity: high
+    category: Cryptography
+    enabled: true
+    tags: [crypto, deprecated, cwe-327]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: '\bmcrypt_'
+    remediation: |
+      Use Laravel's built-in encryption (AES-256-CBC via OpenSSL):
+        $encrypted = encrypt($data);
+        $decrypted = decrypt($encrypted);
+      Or use openssl_encrypt() directly if needed.
+    references:
+      - https://cwe.mitre.org/data/definitions/327.html
+
+  - id: CRYPTO-005
+    title: "base64 used as encryption"
+    description: >
+      base64_encode() is an encoding scheme, not encryption. It provides zero
+      security — any value can be trivially decoded. Data that should be
+      encrypted must use proper AES encryption.
+    severity: medium
+    category: Cryptography
+    enabled: true
+    tags: [crypto, cwe-311]
+    patterns:
+      - type: regex
+        target: php-files
+        pattern: 'base64_encode\(\s*\$(password|secret|key|token|credit|ssn|card)'
+    remediation: |
+      Use Laravel's encryption:
+        $encrypted = encrypt($sensitiveData);
+        $decrypted = decrypt($encrypted);
+    references:
+      - https://cwe.mitre.org/data/definitions/311.html
