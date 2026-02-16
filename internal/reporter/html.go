@@ -6,6 +6,7 @@ import (
 	"html"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eljakani/ward/internal/models"
@@ -28,8 +29,27 @@ func (r *HTMLReporter) Format() string { return "html" }
 
 func (r *HTMLReporter) Generate(_ context.Context, report *models.ScanReport) error {
 	counts := report.CountBySeverity()
+	byCategory := report.FindingsByCategory()
+
+	// Sort categories by highest severity first, then alphabetically.
+	categories := make([]string, 0, len(byCategory))
+	for cat := range byCategory {
+		categories = append(categories, cat)
+	}
+	sort.Slice(categories, func(i, j int) bool {
+		maxI := maxSeverity(byCategory[categories[i]])
+		maxJ := maxSeverity(byCategory[categories[j]])
+		if maxI != maxJ {
+			return maxI > maxJ
+		}
+		return categories[i] < categories[j]
+	})
+
+	total := len(report.Findings)
 
 	var sb strings.Builder
+
+	// ── Document head ──
 	sb.WriteString(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,107 +57,187 @@ func (r *HTMLReporter) Generate(_ context.Context, report *models.ScanReport) er
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ward Security Report</title>
 <style>
-  :root {
-    --bg: #0d1117; --surface: #161b22; --border: #30363d;
-    --text: #e6edf3; --muted: #8b949e;
-    --critical: #ff5252; --high: #ffb74d; --medium: #ffd54f;
-    --low: #81c784; --info: #64b5f6; --accent: #b388ff;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-         background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; }
-  .container { max-width: 1100px; margin: 0 auto; }
-  h1 { color: var(--accent); margin-bottom: 0.5rem; font-size: 1.8rem; }
-  .subtitle { color: var(--muted); margin-bottom: 2rem; }
-  .summary { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem; }
-  .stat { background: var(--surface); border: 1px solid var(--border);
-          border-radius: 8px; padding: 1rem 1.5rem; min-width: 120px; text-align: center; }
-  .stat .number { font-size: 2rem; font-weight: bold; }
-  .stat .label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; }
-  .stat.critical .number { color: var(--critical); }
-  .stat.high .number { color: var(--high); }
-  .stat.medium .number { color: var(--medium); }
-  .stat.low .number { color: var(--low); }
-  .stat.info .number { color: var(--info); }
-  .stat.total .number { color: var(--accent); }
-  .finding { background: var(--surface); border: 1px solid var(--border);
-             border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
-  .finding-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
-  .badge { padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
-  .badge.critical { background: var(--critical); color: #000; }
-  .badge.high { background: var(--high); color: #000; }
-  .badge.medium { background: var(--medium); color: #000; }
-  .badge.low { background: var(--low); color: #000; }
-  .badge.info { background: var(--info); color: #000; }
-  .finding h3 { font-size: 1rem; }
-  .finding .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 0.75rem; }
-  .finding .description { margin-bottom: 0.75rem; }
-  .finding pre { background: #0d1117; border: 1px solid var(--border);
-                 border-radius: 6px; padding: 0.75rem; overflow-x: auto; font-size: 0.85rem;
-                 margin-bottom: 0.75rem; color: var(--info); }
-  .finding .remediation { background: rgba(179,136,255,0.08); border-left: 3px solid var(--accent);
-                          padding: 0.75rem; border-radius: 0 6px 6px 0; font-size: 0.9rem; }
-  .finding .references { margin-top: 0.5rem; }
-  .finding .references a { color: var(--info); font-size: 0.85rem; }
-  .footer { margin-top: 3rem; text-align: center; color: var(--muted); font-size: 0.85rem; }
-  .footer a { color: var(--accent); }
-  @media (prefers-color-scheme: light) {
-    :root { --bg:#fff; --surface:#f6f8fa; --border:#d0d7de; --text:#1f2328; --muted:#656d76; }
-    .finding pre { background: #f6f8fa; }
-  }
+`)
+	sb.WriteString(htmlCSS)
+	sb.WriteString(`
 </style>
 </head>
 <body>
-<div class="container">
 `)
 
-	// Header
-	sb.WriteString(fmt.Sprintf(`<h1>Ward Security Report</h1>
-<p class="subtitle">%s &mdash; Laravel %s &mdash; %s &mdash; %d scanner(s)</p>
-`, esc(report.ProjectContext.ProjectName), esc(report.ProjectContext.LaravelVersion),
-		report.Duration.Round(1e6), len(report.ScannersRun)))
+	// ── Sidebar / Table of Contents ──
+	sb.WriteString(`<aside class="sidebar">
+  <div class="sidebar-logo">WARD</div>
+  <nav class="toc">
+    <div class="toc-title">Report</div>
+    <a href="#overview" class="toc-link">Overview</a>
+    <a href="#project" class="toc-link">Project Info</a>
+    <div class="toc-title" style="margin-top:20px;">Findings</div>
+`)
+	for _, cat := range categories {
+		slug := categorySlug(cat)
+		count := len(byCategory[cat])
+		sb.WriteString(fmt.Sprintf(`    <a href="#cat-%s" class="toc-link"><span>%s</span><span class="toc-count">%d</span></a>
+`, slug, esc(cat), count))
+	}
+	sb.WriteString(`  </nav>
+  <div class="sidebar-footer">Generated by Ward v0.1.0</div>
+</aside>
+`)
 
-	// Summary stats
-	sb.WriteString(`<div class="summary">`)
-	sb.WriteString(fmt.Sprintf(`<div class="stat total"><div class="number">%d</div><div class="label">Total</div></div>`, len(report.Findings)))
+	// ── Main content ──
+	sb.WriteString(`<main class="main">
+`)
+
+	// ── Header ──
+	sb.WriteString(`<header class="header">
+  <h1>Security Report</h1>
+  <p class="header-meta">`)
+	sb.WriteString(fmt.Sprintf(`%s &middot; Laravel %s &middot; PHP %s &middot; %s`,
+		esc(report.ProjectContext.ProjectName),
+		esc(report.ProjectContext.LaravelVersion),
+		esc(report.ProjectContext.PHPVersion),
+		report.Duration.Round(1e6)))
+	sb.WriteString(`</p>
+</header>
+`)
+
+	// ── Overview cards ──
+	sb.WriteString(`<section id="overview" class="section">
+  <h2 class="section-title">Overview</h2>
+  <div class="stats-grid">
+`)
+	sb.WriteString(fmt.Sprintf(`    <div class="stat-card total"><div class="stat-num">%d</div><div class="stat-label">Total Findings</div></div>
+`, total))
 	for _, sev := range []models.Severity{models.SeverityCritical, models.SeverityHigh, models.SeverityMedium, models.SeverityLow, models.SeverityInfo} {
-		if c := counts[sev]; c > 0 {
-			sb.WriteString(fmt.Sprintf(`<div class="stat %s"><div class="number">%d</div><div class="label">%s</div></div>`,
-				strings.ToLower(sev.String()), c, sev.String()))
-		}
+		c := counts[sev]
+		cls := strings.ToLower(sev.String())
+		sb.WriteString(fmt.Sprintf(`    <div class="stat-card %s"><div class="stat-num">%d</div><div class="stat-label">%s</div></div>
+`, cls, c, sev.String()))
 	}
-	sb.WriteString(`</div>`)
+	sb.WriteString(`  </div>
+`)
 
-	// Findings
-	for _, f := range report.Findings {
-		sevClass := strings.ToLower(f.Severity.String())
-		sb.WriteString(`<div class="finding">`)
-		sb.WriteString(fmt.Sprintf(`<div class="finding-header"><span class="badge %s">%s</span><h3>%s</h3></div>`,
-			sevClass, f.Severity.String(), esc(f.Title)))
-		sb.WriteString(fmt.Sprintf(`<div class="meta">%s &bull; %s:%d &bull; %s</div>`,
-			esc(f.ID), esc(f.File), f.Line, esc(f.Category)))
-		sb.WriteString(fmt.Sprintf(`<div class="description">%s</div>`, esc(f.Description)))
-		if f.CodeSnippet != "" {
-			sb.WriteString(fmt.Sprintf(`<pre>%s</pre>`, esc(f.CodeSnippet)))
-		}
-		if f.Remediation != "" {
-			sb.WriteString(fmt.Sprintf(`<div class="remediation">%s</div>`, esc(f.Remediation)))
-		}
-		if len(f.References) > 0 {
-			sb.WriteString(`<div class="references">`)
-			for _, ref := range f.References {
-				sb.WriteString(fmt.Sprintf(`<a href="%s" target="_blank" rel="noopener">%s</a> `, esc(ref), esc(ref)))
+	// Severity bar
+	if total > 0 {
+		sb.WriteString(`  <div class="severity-bar">
+`)
+		for _, sev := range []models.Severity{models.SeverityCritical, models.SeverityHigh, models.SeverityMedium, models.SeverityLow, models.SeverityInfo} {
+			c := counts[sev]
+			if c == 0 {
+				continue
 			}
-			sb.WriteString(`</div>`)
+			pct := float64(c) / float64(total) * 100
+			cls := strings.ToLower(sev.String())
+			sb.WriteString(fmt.Sprintf(`    <div class="bar-seg %s" style="width:%.1f%%" title="%d %s"></div>
+`, cls, pct, c, sev.String()))
 		}
-		sb.WriteString(`</div>`)
+		sb.WriteString(`  </div>
+`)
 	}
 
-	// Footer
-	sb.WriteString(fmt.Sprintf(`<div class="footer">Generated by <a href="https://github.com/Eljakani/ward">Ward</a> v0.1.0</div>
-</div>
+	// Scanners run
+	sb.WriteString(`  <div class="scanners-run">
+    <span class="scanners-label">Scanners:</span>
+`)
+	for _, s := range report.ScannersRun {
+		sb.WriteString(fmt.Sprintf(`    <span class="scanner-tag">%s</span>
+`, esc(s)))
+	}
+	sb.WriteString(`  </div>
+</section>
+`)
+
+	// ── Project Info ──
+	sb.WriteString(`<section id="project" class="section">
+  <h2 class="section-title">Project Info</h2>
+  <div class="info-grid">
+`)
+	writeInfoRow(&sb, "Project", report.ProjectContext.ProjectName)
+	writeInfoRow(&sb, "Laravel", report.ProjectContext.LaravelVersion)
+	writeInfoRow(&sb, "PHP", report.ProjectContext.PHPVersion)
+	writeInfoRow(&sb, "Packages", fmt.Sprintf("%d installed", len(report.ProjectContext.InstalledPackages)))
+	writeInfoRow(&sb, "Config Files", fmt.Sprintf("%d found", len(report.ProjectContext.ConfigFiles)))
+	writeInfoRow(&sb, "Scan Duration", report.Duration.Round(1e6).String())
+	sb.WriteString(`  </div>
+</section>
+`)
+
+	// ── Findings by category ──
+	for _, cat := range categories {
+		slug := categorySlug(cat)
+		findings := byCategory[cat]
+
+		// Sort within category: critical first
+		sort.Slice(findings, func(i, j int) bool {
+			return findings[i].Severity.Weight() > findings[j].Severity.Weight()
+		})
+
+		sb.WriteString(fmt.Sprintf(`<section id="cat-%s" class="section">
+  <div class="cat-header">
+    <h2 class="section-title">%s</h2>
+    <span class="cat-count">%d finding%s</span>
+  </div>
+`, slug, esc(cat), len(findings), plural(len(findings))))
+
+		for idx, f := range findings {
+			sevClass := strings.ToLower(f.Severity.String())
+			findingID := fmt.Sprintf("%s-%d", slug, idx)
+
+			sb.WriteString(fmt.Sprintf(`  <details class="finding" id="%s">
+    <summary class="finding-summary">
+      <span class="badge %s">%s</span>
+      <span class="finding-title">%s</span>
+      <span class="finding-id">%s</span>
+      <span class="finding-loc">%s:%d</span>
+      <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    </summary>
+    <div class="finding-body">
+`, findingID, sevClass, f.Severity.String(), esc(f.Title), esc(f.ID), esc(f.File), f.Line))
+
+			sb.WriteString(fmt.Sprintf(`      <p class="finding-desc">%s</p>
+`, esc(f.Description)))
+
+			if f.CodeSnippet != "" {
+				sb.WriteString(fmt.Sprintf(`      <pre class="finding-code">%s</pre>
+`, esc(f.CodeSnippet)))
+			}
+
+			if f.Remediation != "" {
+				sb.WriteString(fmt.Sprintf(`      <div class="finding-fix">
+        <div class="fix-label">Remediation</div>
+        <p>%s</p>
+      </div>
+`, esc(f.Remediation)))
+			}
+
+			if len(f.References) > 0 {
+				sb.WriteString(`      <div class="finding-refs">
+`)
+				for _, ref := range f.References {
+					sb.WriteString(fmt.Sprintf(`        <a href="%s" target="_blank" rel="noopener">%s</a>
+`, esc(ref), esc(ref)))
+				}
+				sb.WriteString(`      </div>
+`)
+			}
+
+			sb.WriteString(`    </div>
+  </details>
+`)
+		}
+
+		sb.WriteString(`</section>
+`)
+	}
+
+	// ── Footer ──
+	sb.WriteString(`<footer class="report-footer">
+  <p>Generated by <a href="https://github.com/Eljakani/ward" target="_blank" rel="noopener">Ward</a> v0.1.0</p>
+</footer>
+</main>
 </body>
-</html>`))
+</html>`)
 
 	outPath := filepath.Join(r.OutputDir, "ward-report.html")
 	if err := os.WriteFile(outPath, []byte(sb.String()), 0644); err != nil {
@@ -150,3 +250,430 @@ func (r *HTMLReporter) Generate(_ context.Context, report *models.ScanReport) er
 func esc(s string) string {
 	return html.EscapeString(s)
 }
+
+func categorySlug(cat string) string {
+	s := strings.ToLower(cat)
+	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.ReplaceAll(s, "/", "-")
+	return s
+}
+
+func maxSeverity(findings []models.Finding) int {
+	max := 0
+	for _, f := range findings {
+		if w := f.Severity.Weight(); w > max {
+			max = w
+		}
+	}
+	return max
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+func writeInfoRow(sb *strings.Builder, label, value string) {
+	sb.WriteString(fmt.Sprintf(`    <div class="info-row"><span class="info-label">%s</span><span class="info-value">%s</span></div>
+`, label, esc(value)))
+}
+
+// ── Embedded CSS ──
+
+const htmlCSS = `
+  :root {
+    --bg: #0a0a0f;
+    --bg-raised: #0e0e16;
+    --surface: #13131d;
+    --border: #1c1c2c;
+    --text: #c8c8d8;
+    --text-bright: #f0f0f5;
+    --text-dim: #6b6b80;
+    --critical: #ff3333;
+    --high: #ff2d55;
+    --medium: #fbbf24;
+    --low: #67e8f9;
+    --info: #6b6b80;
+    --accent: #7c4dff;
+    --green: #3ddc84;
+    --radius: 10px;
+    --sidebar-w: 260px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--bg-raised);
+    border-right: 1px solid var(--border);
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    z-index: 10;
+  }
+  .sidebar-logo {
+    font-family: "SF Mono", "Consolas", "Liberation Mono", Menlo, monospace;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    background: linear-gradient(135deg, #ff3333, #7c4dff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 32px;
+  }
+  .toc { flex: 1; }
+  .toc-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+  .toc-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    margin-bottom: 2px;
+    border-radius: 6px;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 13px;
+    transition: background .15s, color .15s;
+  }
+  .toc-link:hover {
+    background: rgba(124,77,255,.08);
+    color: var(--text);
+  }
+  .toc-count {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    background: rgba(124,77,255,.12);
+    color: var(--accent);
+    padding: 1px 7px;
+    border-radius: 4px;
+  }
+  .sidebar-footer {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Main ── */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    padding: 40px 48px 80px;
+    max-width: 960px;
+  }
+
+  /* ── Header ── */
+  .header { margin-bottom: 48px; }
+  .header h1 {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--text-bright);
+    letter-spacing: -.3px;
+    margin-bottom: 6px;
+  }
+  .header-meta {
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  /* ── Section ── */
+  .section {
+    margin-bottom: 56px;
+    scroll-margin-top: 24px;
+  }
+  .section-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 20px;
+    letter-spacing: -.2px;
+  }
+
+  /* ── Stat cards ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 16px;
+    text-align: center;
+  }
+  .stat-num {
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+  .stat-card.total    .stat-num { color: var(--accent); }
+  .stat-card.critical .stat-num { color: var(--critical); }
+  .stat-card.high     .stat-num { color: var(--high); }
+  .stat-card.medium   .stat-num { color: var(--medium); }
+  .stat-card.low      .stat-num { color: var(--low); }
+  .stat-card.info     .stat-num { color: var(--text-dim); }
+
+  /* ── Severity bar ── */
+  .severity-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    background: var(--surface);
+  }
+  .bar-seg { min-width: 4px; }
+  .bar-seg.critical { background: var(--critical); }
+  .bar-seg.high     { background: var(--high); }
+  .bar-seg.medium   { background: var(--medium); }
+  .bar-seg.low      { background: var(--low); }
+  .bar-seg.info     { background: var(--text-dim); }
+
+  /* ── Scanners ── */
+  .scanners-run {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .scanners-label {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .scanner-tag {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    padding: 3px 12px;
+    border-radius: 6px;
+    background: rgba(124,77,255,.08);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Info grid ── */
+  .info-grid {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .info-row {
+    display: flex;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label {
+    min-width: 140px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .info-value {
+    color: var(--text-bright);
+  }
+
+  /* ── Category header ── */
+  .cat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .cat-header .section-title { margin-bottom: 0; }
+  .cat-count {
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: rgba(124,77,255,.1);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Finding (collapsible) ── */
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .finding[open] {
+    border-color: var(--accent);
+  }
+  .finding-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    cursor: pointer;
+    list-style: none;
+    font-size: 14px;
+    transition: background .15s;
+  }
+  .finding-summary:hover { background: rgba(255,255,255,.02); }
+  .finding-summary::-webkit-details-marker { display: none; }
+  .finding-summary::marker { content: ""; }
+
+  .finding-title {
+    flex: 1;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+  .finding-id {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .finding-loc {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .chevron {
+    color: var(--text-dim);
+    transition: transform .2s;
+    flex-shrink: 0;
+  }
+  .finding[open] .chevron {
+    transform: rotate(180deg);
+  }
+
+  .finding-body {
+    padding: 0 18px 18px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  .finding-desc {
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 14px;
+    line-height: 1.7;
+  }
+  .finding-code {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    color: var(--low);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .finding-fix {
+    background: rgba(124,77,255,.06);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .fix-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .finding-fix p {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .finding-refs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .finding-refs a {
+    font-size: 13px;
+    color: var(--accent);
+    text-decoration: none;
+    word-break: break-all;
+  }
+  .finding-refs a:hover { text-decoration: underline; }
+
+  /* ── Badge ── */
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    flex-shrink: 0;
+    font-family: "SF Mono", Consolas, monospace;
+  }
+  .badge.critical { background: rgba(255,51,51,.15); color: var(--critical); }
+  .badge.high     { background: rgba(255,45,85,.15); color: var(--high); }
+  .badge.medium   { background: rgba(251,191,36,.12); color: var(--medium); }
+  .badge.low      { background: rgba(103,232,249,.1); color: var(--low); }
+  .badge.info     { background: rgba(107,107,128,.12); color: var(--text-dim); }
+
+  /* ── Footer ── */
+  .report-footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .report-footer a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 800px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 24px 20px 60px; }
+    .stats-grid { grid-template-columns: repeat(3, 1fr); }
+    .finding-summary { flex-wrap: wrap; gap: 8px; }
+    .finding-loc { display: none; }
+  }
+
+  @media print {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .finding { break-inside: avoid; }
+    body { background: #fff; color: #1a1a1a; }
+    .stat-card, .info-grid, .finding { border-color: #ddd; background: #f9f9f9; }
+  }
+`
