@@ -80,9 +80,7 @@ func (r *SARIFReporter) Generate(_ context.Context, report *models.ScanReport) e
 		if f.CodeSnippet != "" {
 			result.Locations[0].PhysicalLocation.Region.Snippet = &sarifSnippet{Text: f.CodeSnippet}
 		}
-		if len(f.References) > 0 {
-			result.PartialFingerprints = map[string]string{"primaryLocationLineHash": f.ID + f.File}
-		}
+		result.PartialFingerprints = map[string]string{"primaryLocationLineHash/v1": f.Fingerprint()}
 		results = append(results, result)
 	}
 
