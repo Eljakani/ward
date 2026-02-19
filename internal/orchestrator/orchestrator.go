@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/eljakani/ward/internal/baseline"
 	"github.com/eljakani/ward/internal/config"
 	"github.com/eljakani/ward/internal/eventbus"
 	"github.com/eljakani/ward/internal/models"
@@ -20,15 +21,27 @@ import (
 
 // Orchestrator coordinates the full scan pipeline.
 type Orchestrator struct {
-	bus     *eventbus.EventBus
-	cfg     *config.WardConfig
-	target  string
-	version string
+	bus          *eventbus.EventBus
+	cfg          *config.WardConfig
+	target       string
+	version      string
+	baseline     *baseline.Baseline
+	baselinePath string // if set, save baseline after scan
 }
 
 // New creates a new Orchestrator.
 func New(bus *eventbus.EventBus, cfg *config.WardConfig, target string, version string) *Orchestrator {
 	return &Orchestrator{bus: bus, cfg: cfg, target: target, version: version}
+}
+
+// SetBaseline configures an existing baseline for filtering.
+func (o *Orchestrator) SetBaseline(b *baseline.Baseline) {
+	o.baseline = b
+}
+
+// SetBaselinePath configures a path to save a new baseline after scanning.
+func (o *Orchestrator) SetBaselinePath(path string) {
+	o.baselinePath = path
 }
 
 // Run executes the full scan pipeline.
@@ -172,6 +185,18 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	o.stageStart(models.StagePostProcess)
 	allFindings = deduplicate(allFindings)
 	allFindings = filterBySeverity(allFindings, models.ParseSeverity(o.cfg.Severity))
+
+	// Apply baseline filtering
+	if o.baseline != nil {
+		var suppressed int
+		allFindings, suppressed = o.baseline.Filter(allFindings)
+		if suppressed > 0 {
+			o.bus.Publish(eventbus.NewEvent(eventbus.EventLogMessage, eventbus.LogMessageData{
+				Level: "info", Message: fmt.Sprintf("%d findings suppressed by baseline", suppressed),
+			}))
+		}
+	}
+
 	o.stageComplete(models.StagePostProcess)
 
 	// --- Stage 5: Report ---
@@ -219,6 +244,19 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	}
 
 	o.stageComplete(models.StageReport)
+
+	// Save baseline if requested
+	if o.baselinePath != "" {
+		if err := baseline.Save(o.baselinePath, allFindings); err != nil {
+			o.bus.Publish(eventbus.NewEvent(eventbus.EventLogMessage, eventbus.LogMessageData{
+				Level: "warn", Message: fmt.Sprintf("Failed to save baseline: %v", err),
+			}))
+		} else {
+			o.bus.Publish(eventbus.NewEvent(eventbus.EventLogMessage, eventbus.LogMessageData{
+				Level: "info", Message: fmt.Sprintf("Baseline saved to %s (%d findings)", o.baselinePath, len(allFindings)),
+			}))
+		}
+	}
 
 	// --- Done ---
 	o.bus.Publish(eventbus.NewEvent(eventbus.EventScanCompleted, eventbus.ScanCompletedData{

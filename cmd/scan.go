@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/eljakani/ward/internal/baseline"
 	"github.com/eljakani/ward/internal/config"
 	"github.com/eljakani/ward/internal/eventbus"
 	"github.com/eljakani/ward/internal/models"
@@ -16,6 +17,12 @@ import (
 	"github.com/eljakani/ward/internal/tui/banner"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+)
+
+var (
+	failOn         string
+	baselinePath   string
+	updateBaseline string
 )
 
 var scanCmd = &cobra.Command{
@@ -30,22 +37,40 @@ var scanCmd = &cobra.Command{
 			return fmt.Errorf("loading config: %w", err)
 		}
 
+		// Load baseline if specified
+		var bl *baseline.Baseline
+		if baselinePath != "" {
+			bl, err = baseline.Load(baselinePath)
+			if err != nil {
+				return fmt.Errorf("loading baseline: %w", err)
+			}
+		}
+
 		// If --output specifies formats (not "tui"), override config and run headless
 		if outputFmt != "tui" {
 			cfg.Output.Formats = parseOutputFormats(outputFmt)
-			return runHeadless(cfg, targetPath)
+			return runHeadless(cfg, targetPath, bl)
 		}
 
 		// If no TTY available, fall back to headless
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return runHeadless(cfg, targetPath)
+			return runHeadless(cfg, targetPath, bl)
 		}
 
-		return runWithTUI(cfg, targetPath)
+		return runWithTUI(cfg, targetPath, bl)
 	},
 }
 
-func runWithTUI(cfg *config.WardConfig, targetPath string) error {
+func configureOrch(orch *orchestrator.Orchestrator, bl *baseline.Baseline) {
+	if bl != nil {
+		orch.SetBaseline(bl)
+	}
+	if updateBaseline != "" {
+		orch.SetBaselinePath(updateBaseline)
+	}
+}
+
+func runWithTUI(cfg *config.WardConfig, targetPath string, bl *baseline.Baseline) error {
 	bus := eventbus.New()
 	model := tui.NewApp(bus, targetPath, Version)
 
@@ -55,8 +80,16 @@ func runWithTUI(cfg *config.WardConfig, targetPath string) error {
 	bridge.Start()
 	defer bridge.Stop()
 
+	// Capture the report for fail-on check
+	var finalReport *models.ScanReport
+	bus.Subscribe(eventbus.EventScanCompleted, func(e eventbus.Event) {
+		data := e.Data.(eventbus.ScanCompletedData)
+		finalReport = data.Report
+	})
+
 	go func() {
 		orch := orchestrator.New(bus, cfg, targetPath, Version)
+		configureOrch(orch, bl)
 		if err := orch.Run(context.Background()); err != nil {
 			bus.Publish(eventbus.NewEvent(eventbus.EventScanFailed, eventbus.ScanFailedData{
 				Error: err,
@@ -65,10 +98,15 @@ func runWithTUI(cfg *config.WardConfig, targetPath string) error {
 	}()
 
 	_, err := p.Run()
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Check --fail-on threshold after TUI exits
+	return checkFailOn(finalReport)
 }
 
-func runHeadless(cfg *config.WardConfig, targetPath string) error {
+func runHeadless(cfg *config.WardConfig, targetPath string, bl *baseline.Baseline) error {
 	fmt.Println(banner.Render(Version))
 
 	bus := eventbus.New()
@@ -82,6 +120,9 @@ func runHeadless(cfg *config.WardConfig, targetPath string) error {
 		models.SeverityLow:      ptr(lipgloss.NewStyle().Foreground(lipgloss.Color("#81C784"))),
 		models.SeverityInfo:     ptr(lipgloss.NewStyle().Foreground(lipgloss.Color("#64B5F6"))),
 	}
+
+	// Capture report for fail-on
+	var finalReport *models.ScanReport
 
 	// Print events as they happen
 	bus.Subscribe(eventbus.EventStageStarted, func(e eventbus.Event) {
@@ -109,6 +150,7 @@ func runHeadless(cfg *config.WardConfig, targetPath string) error {
 	bus.Subscribe(eventbus.EventScanCompleted, func(e eventbus.Event) {
 		data := e.Data.(eventbus.ScanCompletedData)
 		r := data.Report
+		finalReport = r
 		counts := r.CountBySeverity()
 		fmt.Println()
 		fmt.Printf("  %s %d findings in %s\n", accent.Render("Done."), len(r.Findings), r.Duration.Round(1e6))
@@ -122,7 +164,39 @@ func runHeadless(cfg *config.WardConfig, targetPath string) error {
 	})
 
 	orch := orchestrator.New(bus, cfg, targetPath, Version)
-	return orch.Run(context.Background())
+	configureOrch(orch, bl)
+	if err := orch.Run(context.Background()); err != nil {
+		return err
+	}
+
+	return checkFailOn(finalReport)
+}
+
+// checkFailOn returns an error (causing exit code 1) if any finding meets or
+// exceeds the --fail-on severity threshold.
+func checkFailOn(report *models.ScanReport) error {
+	if failOn == "" || report == nil {
+		return nil
+	}
+
+	threshold := models.ParseSeverity(failOn)
+
+	for _, f := range report.Findings {
+		if f.Severity >= threshold {
+			counts := report.CountBySeverity()
+			var parts []string
+			for _, sev := range []models.Severity{models.SeverityCritical, models.SeverityHigh, models.SeverityMedium, models.SeverityLow, models.SeverityInfo} {
+				if sev >= threshold {
+					if c := counts[sev]; c > 0 {
+						parts = append(parts, fmt.Sprintf("%d %s", c, sev))
+					}
+				}
+			}
+			return fmt.Errorf("findings exceed --fail-on %s threshold: %s", failOn, strings.Join(parts, ", "))
+		}
+	}
+
+	return nil
 }
 
 func ptr(s lipgloss.Style) *lipgloss.Style { return &s }
@@ -141,5 +215,8 @@ func parseOutputFormats(s string) []string {
 }
 
 func init() {
+	scanCmd.Flags().StringVar(&failOn, "fail-on", "", "exit code 1 if findings at or above this severity (info, low, medium, high, critical)")
+	scanCmd.Flags().StringVar(&baselinePath, "baseline", "", "path to baseline file — suppress known findings")
+	scanCmd.Flags().StringVar(&updateBaseline, "update-baseline", "", "save current findings as a new baseline file at this path")
 	rootCmd.AddCommand(scanCmd)
 }

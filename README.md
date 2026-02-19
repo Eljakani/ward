@@ -113,15 +113,51 @@ ward scan /path/to/your/laravel-project
 
 ```bash
 ward scan https://github.com/user/laravel-project.git
-```
-
-### Headless Mode (CI)
-
 ```bash
 ward scan ./my-app --output json
 ```
 
 When no TTY is available or `--output` is specified, Ward runs in headless mode with styled text output — no interactive TUI.
+
+### CI Exit Codes (`--fail-on`)
+
+```bash
+# Exit code 1 if any High or Critical findings exist
+ward scan . --output json --fail-on high
+
+# Fail on any finding (including Info)
+ward scan . --output json --fail-on info
+```
+
+Severity threshold is inclusive: `--fail-on medium` fails on Medium, High, and Critical.
+
+### Baseline (Suppress Known Findings)
+
+On first run, generate a baseline of current findings:
+
+```bash
+ward scan . --output json --update-baseline .ward-baseline.json
+```
+
+On subsequent runs, suppress those known findings:
+
+```bash
+ward scan . --output json --baseline .ward-baseline.json --fail-on high
+```
+
+Only **new** findings (not in the baseline) will be reported. Commit `.ward-baseline.json` to your repo to track acknowledged findings.
+
+### CI Pipeline Example
+
+```yaml
+- name: Run Ward
+  run: |
+    ward scan . --output json,sarif \
+      --baseline .ward-baseline.json \
+      --fail-on high
+```
+
+> 📖 **Full CI/CD guide** — GitHub Actions, GitLab CI, Bitbucket, Azure DevOps, Docker, caching, and troubleshooting: [docs/ci-integration.md](docs/ci-integration.md)
 
 ---
 
