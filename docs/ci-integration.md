@@ -91,7 +91,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
       - name: Install Ward
         run: go install github.com/eljakani/ward@latest
@@ -162,7 +162,7 @@ jobs:
 # .gitlab-ci.yml
 ward-security:
   stage: test
-  image: golang:1.22-alpine
+  image: golang:1.24-alpine
   before_script:
     - go install github.com/eljakani/ward@latest
     - ward init
@@ -189,7 +189,7 @@ pipelines:
   default:
     - step:
         name: Ward Security Scan
-        image: golang:1.22-alpine
+        image: golang:1.24-alpine
         script:
           - go install github.com/eljakani/ward@latest
           - ward init
@@ -214,7 +214,7 @@ pool:
 steps:
   - task: GoTool@0
     inputs:
-      version: '1.22'
+      version: '1.24'
 
   - script: |
       go install github.com/eljakani/ward@latest

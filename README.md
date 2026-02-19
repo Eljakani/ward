@@ -499,7 +499,7 @@ ward/
 
 ## Requirements
 
-- Go 1.22+
+- Go 1.24+
 - Git (for scanning remote repositories)
 
 ---
