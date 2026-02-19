@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"runtime/debug"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/eljakani/ward/internal/tui/banner"
@@ -18,6 +19,26 @@ var (
 	Commit  = "none"
 	Date    = "unknown"
 )
+
+func init() {
+	// When installed via `go install @v0.3.0`, ldflags aren't set, but Go
+	// embeds the module version in the binary. Read it as a fallback.
+	if Version == "dev" {
+		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+			Version = info.Main.Version
+		}
+	}
+	if Commit == "none" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			for _, s := range info.Settings {
+				if s.Key == "vcs.revision" && len(s.Value) >= 7 {
+					Commit = s.Value[:7]
+					break
+				}
+			}
+		}
+	}
+}
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
