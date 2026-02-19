@@ -38,10 +38,15 @@ func Render(version string) string {
 		b.WriteByte('\n')
 	}
 
+	// Strip leading "v" to avoid "vv0.3.0" when version already has prefix
+	displayVersion := version
+	if len(displayVersion) > 0 && displayVersion[0] == 'v' {
+		displayVersion = displayVersion[1:]
+	}
 	tagline := lipgloss.NewStyle().
 		Foreground(lipgloss.AdaptiveColor{Light: "#757575", Dark: "#9E9E9E"}).
 		Italic(true).
-		Render(fmt.Sprintf("  Laravel Security Scanner v%s", version))
+		Render(fmt.Sprintf("  Laravel Security Scanner v%s", displayVersion))
 
 	b.WriteString(tagline)
 	b.WriteByte('\n')

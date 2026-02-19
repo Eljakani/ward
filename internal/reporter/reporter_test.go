@@ -79,7 +79,7 @@ func TestJSONReporter(t *testing.T) {
 
 func TestSARIFReporter(t *testing.T) {
 	dir := t.TempDir()
-	r := NewSARIFReporter(dir)
+	r := NewSARIFReporter(dir, "test")
 
 	if r.Name() != "sarif" {
 		t.Errorf("Name() = %q, want %q", r.Name(), "sarif")
@@ -135,7 +135,7 @@ func TestHTMLReporter(t *testing.T) {
 
 func TestMarkdownReporter(t *testing.T) {
 	dir := t.TempDir()
-	r := NewMarkdownReporter(dir)
+	r := NewMarkdownReporter(dir, "test")
 
 	err := r.Generate(context.Background(), testReport())
 	if err != nil {

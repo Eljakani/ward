@@ -15,12 +15,11 @@ import (
 	"github.com/eljakani/ward/internal/tui/views"
 )
 
-const version = "0.2.0"
-
 // App is the root Bubble Tea model for Laravel Ward.
 type App struct {
 	bus        *eventbus.EventBus
 	targetPath string
+	version    string
 
 	// Layout
 	width  int
@@ -57,7 +56,7 @@ type App struct {
 }
 
 // NewApp creates the root TUI model.
-func NewApp(bus *eventbus.EventBus, targetPath string) *App {
+func NewApp(bus *eventbus.EventBus, targetPath string, version string) *App {
 	t := theme.DefaultTheme()
 
 	s := spinner.New()
@@ -70,6 +69,7 @@ func NewApp(bus *eventbus.EventBus, targetPath string) *App {
 	return &App{
 		bus:            bus,
 		targetPath:     targetPath,
+		version:        version,
 		theme:          t,
 		keys:           DefaultKeyMap(),
 		help:           h,
@@ -320,7 +320,7 @@ func (a *App) renderHeader() string {
 		LaravelVersion: a.laravelVersion,
 		PHPVersion:     a.phpVersion,
 		PackageCount:   a.packageCount,
-		ToolVersion:    version,
+		ToolVersion:    a.version,
 		ScanRunning:    a.scanRunning,
 		ScanComplete:   a.scanComplete,
 		ScanError:      a.scanError != nil,

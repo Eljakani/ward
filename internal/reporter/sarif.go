@@ -13,13 +13,17 @@ import (
 // SARIFReporter generates a SARIF 2.1.0 report for GitHub Code Scanning integration.
 type SARIFReporter struct {
 	OutputDir string
+	Version   string
 }
 
-func NewSARIFReporter(outputDir string) *SARIFReporter {
+func NewSARIFReporter(outputDir string, version string) *SARIFReporter {
 	if outputDir == "" {
 		outputDir = "."
 	}
-	return &SARIFReporter{OutputDir: outputDir}
+	if version == "" {
+		version = "dev"
+	}
+	return &SARIFReporter{OutputDir: outputDir, Version: version}
 }
 
 func (r *SARIFReporter) Name() string   { return "sarif" }
@@ -34,8 +38,8 @@ func (r *SARIFReporter) Generate(_ context.Context, report *models.ScanReport) e
 		if _, exists := ruleIndex[f.ID]; !exists {
 			ruleIndex[f.ID] = len(rules)
 			rule := sarifRule{
-				ID:   f.ID,
-				Name: f.Title,
+				ID:               f.ID,
+				Name:             f.Title,
 				ShortDescription: sarifMessage{Text: f.Title},
 				FullDescription:  sarifMessage{Text: f.Description},
 				DefaultConfiguration: sarifRuleConfig{
@@ -91,8 +95,8 @@ func (r *SARIFReporter) Generate(_ context.Context, report *models.ScanReport) e
 					Driver: sarifDriver{
 						Name:            "Ward",
 						InformationURI:  "https://github.com/Eljakani/ward",
-						Version:         "0.2.0",
-						SemanticVersion: "0.2.0",
+						Version:         r.Version,
+						SemanticVersion: r.Version,
 						Rules:           rules,
 					},
 				},
@@ -212,8 +216,8 @@ type sarifArtifactLocation struct {
 }
 
 type sarifRegion struct {
-	StartLine int            `json:"startLine"`
-	Snippet   *sarifSnippet  `json:"snippet,omitempty"`
+	StartLine int           `json:"startLine"`
+	Snippet   *sarifSnippet `json:"snippet,omitempty"`
 }
 
 type sarifSnippet struct {

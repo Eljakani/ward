@@ -39,12 +39,12 @@ Ward scans your project in a pipeline of five stages:
 
 **3. Scanners** — Independent security checks run against the resolved context:
 
-| Scanner | What it checks |
-|---------|---------------|
-| `env-scanner` | `.env` misconfigurations — debug mode, empty APP_KEY, non-production env, weak credentials, leaked secrets in `.env.example` |
-| `config-scanner` | `config/*.php` — hardcoded debug mode, session cookie flags, CORS wildcards, hardcoded credentials in config files |
+| Scanner              | What it checks                                                                                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `env-scanner`        | `.env` misconfigurations — debug mode, empty APP_KEY, non-production env, weak credentials, leaked secrets in `.env.example`                               |
+| `config-scanner`     | `config/*.php` — hardcoded debug mode, session cookie flags, CORS wildcards, hardcoded credentials in config files                                         |
 | `dependency-scanner` | `composer.lock` — **live CVE lookup** via [OSV.dev](https://osv.dev) against the entire Packagist advisory database (no hardcoded list, always up-to-date) |
-| `rules-scanner` | 42 built-in YAML rules covering secrets, SQL/command/code injection, XSS, debug artifacts, weak crypto, auth issues, mass assignment, unsafe file uploads |
+| `rules-scanner`      | 40 built-in YAML rules covering secrets, SQL/command/code injection, XSS, debug artifacts, weak crypto, auth issues, mass assignment, unsafe file uploads  |
 
 **4. Post-Process** — Deduplicates findings, filters by minimum severity (from config), and diffs against your last scan to show what's new vs resolved.
 
@@ -60,6 +60,8 @@ Ward scans your project in a pipeline of five stages:
 go install github.com/eljakani/ward@latest
 ```
 
+> **Note:** `@latest` resolves to the latest **Git tag** (e.g., `v0.3.0`). To install a specific version: `go install github.com/eljakani/ward@v0.3.0`
+
 Make sure `$GOPATH/bin` is in your `PATH` (Go installs binaries there):
 
 ```bash
@@ -73,7 +75,8 @@ Or build from source:
 ```bash
 git clone https://github.com/Eljakani/ward.git
 cd ward
-go build -o ward .
+make build    # builds ./ward with embedded version, commit, and date
+make install  # installs to $GOPATH/bin
 ```
 
 ### Initialize
@@ -82,7 +85,7 @@ go build -o ward .
 ward init
 ```
 
-This creates `~/.ward/` with your configuration and 42 default security rules:
+This creates `~/.ward/` with your configuration and 40 default security rules:
 
 ```
 ~/.ward/
@@ -152,7 +155,7 @@ Add the SARIF format and upload it in your CI workflow:
     sarif_file: ward-report.sarif
 ```
 
-See `.github/workflows/ward.yml` for a complete example.
+See the GitHub Actions example below for a complete workflow.
 
 ---
 
@@ -208,24 +211,24 @@ rules:
 
 ### Pattern Types
 
-| Type | Description |
-|------|-------------|
-| `regex` | Regular expression match (line-by-line) |
-| `contains` | Exact substring match |
+| Type          | Description                              |
+| ------------- | ---------------------------------------- |
+| `regex`       | Regular expression match (line-by-line)  |
+| `contains`    | Exact substring match                    |
 | `file-exists` | Check if a file matching the glob exists |
 
 ### Targets
 
-| Target | Files matched |
-|--------|--------------|
-| `php-files` | All `.php` files (recursive, skips `vendor/`) |
-| `blade-files` | `resources/views/**/*.blade.php` |
-| `config-files` | `config/*.php` |
-| `env-files` | `.env`, `.env.*` |
-| `routes-files` | `routes/*.php` |
-| `migration-files` | `database/migrations/*.php` |
-| `js-files` | `resources/js/**/*.{js,ts,jsx,tsx}` |
-| `path/to/*.ext` | Any custom glob pattern |
+| Target            | Files matched                                 |
+| ----------------- | --------------------------------------------- |
+| `php-files`       | All `.php` files (recursive, skips `vendor/`) |
+| `blade-files`     | `resources/views/**/*.blade.php`              |
+| `config-files`    | `config/*.php`                                |
+| `env-files`       | `.env`, `.env.*`                              |
+| `routes-files`    | `routes/*.php`                                |
+| `migration-files` | `database/migrations/*.php`                   |
+| `js-files`        | `resources/js/**/*.{js,ts,jsx,tsx}`           |
+| `path/to/*.ext`   | Any custom glob pattern                       |
 
 ### Negative Patterns
 
@@ -281,14 +284,14 @@ Displayed after scan completion — sortable findings table with severity badges
 
 ### Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| `q` / `Ctrl+C` | Quit |
-| `?` | Toggle help |
-| `Tab` | Switch view or panel |
-| `j` / `k` / arrows | Navigate findings |
-| `s` | Cycle sort column (severity, category, file) |
-| `Esc` | Back to scan view |
+| Key                | Action                                       |
+| ------------------ | -------------------------------------------- |
+| `q` / `Ctrl+C`     | Quit                                         |
+| `?`                | Toggle help                                  |
+| `Tab`              | Switch view or panel                         |
+| `j` / `k` / arrows | Navigate findings                            |
+| `s`                | Cycle sort column (severity, category, file) |
+| `Esc`              | Back to scan view                            |
 
 ---
 
@@ -296,7 +299,7 @@ Displayed after scan completion — sortable findings table with severity badges
 
 ### GitHub Actions
 
-Copy `.github/workflows/ward.yml` to your Laravel project:
+Add this workflow to your Laravel project as `.github/workflows/ward.yml`:
 
 ```yaml
 name: Ward Security Scan
@@ -341,16 +344,16 @@ ward-scan:
 
 ### env-scanner (8 checks)
 
-| ID | Check | Severity |
-|----|-------|----------|
-| ENV-001 | Missing `.env` file | Info |
-| ENV-002 | `APP_DEBUG=true` | High |
-| ENV-003 | Empty or missing `APP_KEY` | Critical |
-| ENV-004 | Weak/default `APP_KEY` | Critical |
-| ENV-005 | Non-production `APP_ENV` | Medium |
-| ENV-006 | Empty `DB_PASSWORD` | Low |
-| ENV-007 | File sessions in production | Low |
-| ENV-008 | Real credentials in `.env.example` | Medium |
+| ID      | Check                              | Severity |
+| ------- | ---------------------------------- | -------- |
+| ENV-001 | Missing `.env` file                | Info     |
+| ENV-002 | `APP_DEBUG=true`                   | High     |
+| ENV-003 | Empty or missing `APP_KEY`         | Critical |
+| ENV-004 | Weak/default `APP_KEY`             | Critical |
+| ENV-005 | Non-production `APP_ENV`           | Medium   |
+| ENV-006 | Empty `DB_PASSWORD`                | Low      |
+| ENV-007 | File sessions in production        | Low      |
+| ENV-008 | Real credentials in `.env.example` | Medium   |
 
 ### config-scanner (13 checks)
 
@@ -362,7 +365,7 @@ Reads your `composer.lock` as an SBOM and queries the [OSV.dev](https://osv.dev)
 
 Requires network access. Results include CVE IDs, severity, affected version ranges, fixed versions, and remediation commands.
 
-### rules-scanner (42 default rules)
+### rules-scanner (40 default rules)
 
 Pattern-based checks loaded from `~/.ward/rules/*.yaml` covering secrets, injection, XSS, debug, crypto, config, and auth categories.
 
@@ -370,15 +373,15 @@ Pattern-based checks loaded from `~/.ward/rules/*.yaml` covering secrets, inject
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `ward` | Show banner and usage |
-| `ward init` | Create `~/.ward/` with default config and 42 security rules |
-| `ward init --force` | Recreate config files (overwrites existing) |
-| `ward scan <path>` | Scan a local Laravel project |
-| `ward scan <git-url>` | Clone and scan a remote repository |
-| `ward scan <path> --output json` | Run in headless mode (no TUI) |
-| `ward version` | Print version |
+| Command                          | Description                                                 |
+| -------------------------------- | ----------------------------------------------------------- |
+| `ward`                           | Show banner and usage                                       |
+| `ward init`                      | Create `~/.ward/` with default config and 40 security rules |
+| `ward init --force`              | Recreate config files (overwrites existing)                 |
+| `ward scan <path>`               | Scan a local Laravel project                                |
+| `ward scan <git-url>`            | Clone and scan a remote repository                          |
+| `ward scan <path> --output json` | Run in headless mode (no TUI)                               |
+| `ward version`                   | Print version                                               |
 
 ---
 
@@ -407,7 +410,6 @@ ward/
 │   ├── init.go
 │   ├── scan.go
 │   └── version.go
-├── .github/workflows/ward.yml     # CI template
 └── internal/
     ├── config/                    # Configuration system
     │   ├── config.go              # WardConfig, Load(), Save()
@@ -472,7 +474,7 @@ ward/
 - [x] Event-driven architecture
 - [x] Configuration system (`~/.ward/config.yaml`)
 - [x] Custom YAML rules (`~/.ward/rules/*.yaml`)
-- [x] 42 built-in security rules across 7 categories
+- [x] 40 built-in security rules across 7 categories
 - [x] Source providers (local filesystem, git clone)
 - [x] Context resolvers (composer.json, composer.lock, .env, config files)
 - [x] Scanners: env, config, dependency (15 CVEs), rules engine

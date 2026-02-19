@@ -11,23 +11,24 @@ import (
 	"github.com/eljakani/ward/internal/provider"
 	"github.com/eljakani/ward/internal/reporter"
 	"github.com/eljakani/ward/internal/resolver"
-	"github.com/eljakani/ward/internal/store"
 	configscanner "github.com/eljakani/ward/internal/scanner/configscan"
 	depscanner "github.com/eljakani/ward/internal/scanner/dependency"
 	envscanner "github.com/eljakani/ward/internal/scanner/env"
 	rulesscanner "github.com/eljakani/ward/internal/scanner/rules"
+	"github.com/eljakani/ward/internal/store"
 )
 
 // Orchestrator coordinates the full scan pipeline.
 type Orchestrator struct {
-	bus    *eventbus.EventBus
-	cfg    *config.WardConfig
-	target string
+	bus     *eventbus.EventBus
+	cfg     *config.WardConfig
+	target  string
+	version string
 }
 
 // New creates a new Orchestrator.
-func New(bus *eventbus.EventBus, cfg *config.WardConfig, target string) *Orchestrator {
-	return &Orchestrator{bus: bus, cfg: cfg, target: target}
+func New(bus *eventbus.EventBus, cfg *config.WardConfig, target string, version string) *Orchestrator {
+	return &Orchestrator{bus: bus, cfg: cfg, target: target, version: version}
 }
 
 // Run executes the full scan pipeline.
@@ -284,11 +285,11 @@ func (o *Orchestrator) buildReporters() []reporter.Reporter {
 		case "json":
 			reporters = append(reporters, reporter.NewJSONReporter(outDir))
 		case "sarif":
-			reporters = append(reporters, reporter.NewSARIFReporter(outDir))
+			reporters = append(reporters, reporter.NewSARIFReporter(outDir, o.version))
 		case "html":
 			reporters = append(reporters, reporter.NewHTMLReporter(outDir))
 		case "markdown", "md":
-			reporters = append(reporters, reporter.NewMarkdownReporter(outDir))
+			reporters = append(reporters, reporter.NewMarkdownReporter(outDir, o.version))
 		case "terminal":
 			// terminal output is handled by the headless/TUI path, not a file reporter
 			continue

@@ -47,7 +47,7 @@ var scanCmd = &cobra.Command{
 
 func runWithTUI(cfg *config.WardConfig, targetPath string) error {
 	bus := eventbus.New()
-	model := tui.NewApp(bus, targetPath)
+	model := tui.NewApp(bus, targetPath, Version)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
@@ -56,7 +56,7 @@ func runWithTUI(cfg *config.WardConfig, targetPath string) error {
 	defer bridge.Stop()
 
 	go func() {
-		orch := orchestrator.New(bus, cfg, targetPath)
+		orch := orchestrator.New(bus, cfg, targetPath, Version)
 		if err := orch.Run(context.Background()); err != nil {
 			bus.Publish(eventbus.NewEvent(eventbus.EventScanFailed, eventbus.ScanFailedData{
 				Error: err,
@@ -121,7 +121,7 @@ func runHeadless(cfg *config.WardConfig, targetPath string) error {
 		fmt.Println()
 	})
 
-	orch := orchestrator.New(bus, cfg, targetPath)
+	orch := orchestrator.New(bus, cfg, targetPath, Version)
 	return orch.Run(context.Background())
 }
 
