@@ -101,6 +101,9 @@ jobs:
 
       - name: Run Security Scan
         run: |
+          # --baseline requires the file to exist in the repo.
+          # If you haven't committed .ward-baseline.json yet, omit that flag
+          # or follow the Baseline Workflow section first.
           ward scan . --output json,sarif \
             --baseline .ward-baseline.json \
             --fail-on high
@@ -235,8 +238,10 @@ steps:
 
 If your CI doesn't have Go available, use a multi-stage approach:
 
-```dockerfile
-# Dockerfile.ward
+### Option 1: Scanner Image (Scan Remote Repositories)
+
+Save as `Dockerfile.ward`:
+
 ```dockerfile
 # Use golang:1.24-alpine (or later) to meet the build requirements for Ward
 FROM golang:1.24-alpine
@@ -247,11 +252,11 @@ ENTRYPOINT ["ward"]
 CMD ["--help"]
 ```
 
-Build and run against a URL (saving reports to current directory):
+Build and run against a URL (output files are written to `/app`, which is mounted to your current directory):
 ```bash
-docker build -t ward-scanner .
-# Run scan and mount current dir to /reports to get the output files
-docker run --rm -v $(pwd):/reports ward-scanner scan https://github.com/username/repo.git --output json,sarif --output-dir /reports
+docker build -f Dockerfile.ward -t ward-scanner .
+# Mount current dir to /app (WORKDIR) to retrieve output files
+docker run --rm -v $(pwd):/app ward-scanner scan https://github.com/username/repo.git --output json,sarif
 ```
 
 ### Option 2: CI Pipeline Scanner (Scan the Code Inside)
@@ -308,6 +313,8 @@ ward scan . $ARGS
 | `markdown` | Paste into PR comments or Slack            |
 | `html`     | Attach as build artifact for manual review |
 
+> **Note:** Ward always writes `ward-report.json` regardless of the formats you request. If your `--output` list does not include `json`, a JSON report is still generated as a fallback. Expect this file to appear as a build artifact even when you only asked for `sarif` or `markdown`.
+
 ```bash
 # Generate multiple formats at once
 ward scan . --output json,sarif,markdown --fail-on high
@@ -315,15 +322,13 @@ ward scan . --output json,sarif,markdown --fail-on high
 
 ### Caching Ward Between Runs
 
-Speed up CI by caching the Go binary and Ward config:
+Speed up CI by caching the Ward binary. Do **not** cache `~/.ward` together with the binary when using `@latest` — `ward init` skips existing files (`writeIfMissing`), so cached rule files will not be updated when the binary is upgraded and new default rules will silently not run.
 
 **GitHub Actions:**
 ```yaml
 - uses: actions/cache@v4
   with:
-    path: |
-      ~/go/bin/ward
-      ~/.ward
+    path: ~/go/bin/ward
     key: ward-${{ runner.os }}
 ```
 
@@ -332,7 +337,11 @@ Speed up CI by caching the Go binary and Ward config:
 cache:
   paths:
     - /go/bin/ward
-    - ~/.ward/
+```
+
+If you pin a specific Ward version (e.g. `go install github.com/eljakani/ward@v1.2.3`), you can safely include `~/.ward` in the cache by adding the version to the key:
+```yaml
+key: ward-${{ runner.os }}-v1.2.3
 ```
 
 ---
@@ -343,7 +352,9 @@ cache:
 | ---- | ------------------------------------------------------------------- |
 | `0`  | Scan completed, no findings above threshold (or no `--fail-on` set) |
 | `1`  | Findings exceed `--fail-on` threshold                               |
-| `1`  | Configuration error (missing config, invalid path, etc.)            |
+| `1`  | Fatal error (missing baseline file, invalid path, unreadable config, etc.) |
+
+Both failure modes produce exit code `1`. If your pipeline needs to distinguish a "clean scan blocked by findings" from a "scan couldn't run at all", check stderr: fatal errors print an error message and exit before any scan output is written.
 
 ---
 
@@ -354,6 +365,14 @@ Ensure `$GOPATH/bin` is in your `PATH`:
 ```bash
 export PATH="$PATH:$(go env GOPATH)/bin"
 ```
+
+### "loading baseline: reading baseline .ward-baseline.json: no such file or directory"
+The `--baseline` flag requires the file to already exist. Ward does not create it automatically. You must generate and commit it first:
+```bash
+ward scan . --output json --update-baseline .ward-baseline.json
+git add .ward-baseline.json && git commit -m "chore: add ward security baseline"
+```
+If you're setting up CI for the first time, omit `--baseline` until the file is committed.
 
 ### Baseline file not working
 - The baseline uses fingerprints (hash of rule ID + file + line number)
