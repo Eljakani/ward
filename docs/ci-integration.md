@@ -237,10 +237,30 @@ If your CI doesn't have Go available, use a multi-stage approach:
 
 ```dockerfile
 # Dockerfile.ward
-FROM golang:1.22-alpine AS ward
+```dockerfile
+# Use golang:1.24-alpine (or later) to meet the build requirements for Ward
+FROM golang:1.24-alpine
+RUN apk add --no-cache git
 RUN go install github.com/eljakani/ward@latest && ward init
+WORKDIR /app
+ENTRYPOINT ["ward"]
+CMD ["--help"]
+```
 
-FROM ward AS scanner
+Build and run against a URL (saving reports to current directory):
+```bash
+docker build -t ward-scanner .
+# Run scan and mount current dir to /reports to get the output files
+docker run --rm -v $(pwd):/reports ward-scanner scan https://github.com/username/repo.git --output json,sarif --output-dir /reports
+```
+
+### Option 2: CI Pipeline Scanner (Scan the Code Inside)
+
+If you want to scan the code *during the build process* (e.g. in a CI pipeline):
+
+```dockerfile
+FROM golang:1.24-alpine AS scanner
+RUN go install github.com/eljakani/ward@latest && ward init
 WORKDIR /app
 COPY . .
 RUN ward scan . --output json,sarif --fail-on high
