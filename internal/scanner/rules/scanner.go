@@ -142,6 +142,12 @@ func scanFile(path string, pat config.PatternDef, re *regexp.Regexp) []match {
 	}
 	defer f.Close()
 
+	// Compile exclude pattern if set
+	var excludeRe *regexp.Regexp
+	if pat.ExcludePattern != "" {
+		excludeRe, _ = regexp.Compile(pat.ExcludePattern)
+	}
+
 	var matches []match
 	scanner := bufio.NewScanner(f)
 	lineNum := 0
@@ -155,6 +161,11 @@ func scanFile(path string, pat config.PatternDef, re *regexp.Regexp) []match {
 			matched = re.MatchString(line)
 		case "contains":
 			matched = strings.Contains(line, pat.Pattern)
+		}
+
+		// Skip if the line also matches the exclude pattern
+		if matched && excludeRe != nil && excludeRe.MatchString(line) {
+			matched = false
 		}
 
 		if matched {

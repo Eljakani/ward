@@ -68,6 +68,7 @@ rules:
       - type: regex
         target: php-files
         pattern: '\b(exec|system|shell_exec|passthru|popen|proc_open)\s*\('
+        exclude_pattern: '(escapeshellarg|escapeshellcmd|Process::|Artisan::|//|\*|test)'
     remediation: |
       Avoid shell commands when possible. If necessary:
         - Use escapeshellarg() and escapeshellcmd() for all arguments

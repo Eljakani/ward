@@ -16,6 +16,7 @@ rules:
       - type: regex
         target: routes-files
         pattern: 'Route::(get|post|put|patch|delete)\s*\([^;]*\)\s*;'
+        exclude_pattern: '(login|register|password|reset|verify|email|webhook|health|sitemap|api\/public|csrf|sanctum|__)'
     remediation: |
       Apply middleware to routes:
         Route::get('/dashboard', [DashboardController::class, 'index'])
@@ -108,6 +109,7 @@ rules:
       - type: regex
         target: routes-files
         pattern: 'Route::(get|post|put|patch|delete)\s*\([^)]*api[^;]*\)\s*;'
+        exclude_pattern: '(webhook|health|public|status)'
     remediation: |
       Apply throttle middleware to API routes:
         Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {

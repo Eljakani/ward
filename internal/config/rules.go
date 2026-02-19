@@ -24,10 +24,11 @@ type RuleDefinition struct {
 
 // PatternDef describes a single pattern check within a rule.
 type PatternDef struct {
-	Type     string `yaml:"type"`     // regex, contains, file-exists
-	Target   string `yaml:"target"`   // php-files, blade-files, config-files, env-files
-	Pattern  string `yaml:"pattern"`
-	Negative bool   `yaml:"negative"` // true = finding if pattern is ABSENT
+	Type           string `yaml:"type"`   // regex, contains, file-exists
+	Target         string `yaml:"target"` // php-files, blade-files, config-files, env-files
+	Pattern        string `yaml:"pattern"`
+	Negative       bool   `yaml:"negative"`        // true = finding if pattern is ABSENT
+	ExcludePattern string `yaml:"exclude_pattern"` // if line also matches this, skip it (reduce false positives)
 }
 
 // RuleFile is the top-level structure of a rules YAML file.

@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/eljakani/ward/internal/baseline"
@@ -66,6 +67,9 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 			Level: "info", Message: fmt.Sprintf("Loaded %d custom rule(s)", len(customRules)),
 		}))
 	}
+
+	// Filter scanners based on config enable/disable lists
+	scanners = o.filterScanners(scanners)
 
 	o.bus.Publish(eventbus.NewEvent(eventbus.EventScanStarted, eventbus.ScanStartedData{
 		ProjectPath:  o.target,
@@ -354,4 +358,49 @@ func deduplicate(findings []models.Finding) []models.Finding {
 		result = append(result, f)
 	}
 	return result
+}
+
+// filterScanners applies the config enable/disable lists.
+func (o *Orchestrator) filterScanners(scanners []models.Scanner) []models.Scanner {
+	enable := o.cfg.Scanners.Enable
+	disable := o.cfg.Scanners.Disable
+
+	if len(enable) == 0 && len(disable) == 0 {
+		return scanners
+	}
+
+	enableSet := make(map[string]bool, len(enable))
+	for _, name := range enable {
+		enableSet[strings.ToLower(name)] = true
+	}
+
+	disableSet := make(map[string]bool, len(disable))
+	for _, name := range disable {
+		disableSet[strings.ToLower(name)] = true
+	}
+
+	var filtered []models.Scanner
+	for _, s := range scanners {
+		name := strings.ToLower(s.Name())
+
+		// If enable list is set, only run scanners in that list
+		if len(enableSet) > 0 && !enableSet[name] {
+			o.bus.Publish(eventbus.NewEvent(eventbus.EventLogMessage, eventbus.LogMessageData{
+				Level: "info", Message: fmt.Sprintf("Skipping %s (not in enable list)", s.Name()),
+			}))
+			continue
+		}
+
+		// If disable list is set, skip scanners in that list
+		if disableSet[name] {
+			o.bus.Publish(eventbus.NewEvent(eventbus.EventLogMessage, eventbus.LogMessageData{
+				Level: "info", Message: fmt.Sprintf("Skipping %s (disabled)", s.Name()),
+			}))
+			continue
+		}
+
+		filtered = append(filtered, s)
+	}
+
+	return filtered
 }

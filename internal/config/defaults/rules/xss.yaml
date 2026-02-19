@@ -16,6 +16,7 @@ rules:
       - type: regex
         target: blade-files
         pattern: '\{!!\s*\$'
+        exclude_pattern: '(clean\(|purify\(|strip_tags\(|htmlspecialchars\(|Purifier::|markdown\(|sanitize\()'
     remediation: |
       Use escaped output:
         {{ $variable }}        — auto-escapes HTML entities
