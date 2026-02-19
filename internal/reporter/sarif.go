@@ -67,8 +67,7 @@ func (r *SARIFReporter) Generate(_ context.Context, report *models.ScanReport) e
 				{
 					PhysicalLocation: sarifPhysicalLocation{
 						ArtifactLocation: sarifArtifactLocation{
-							URI:       f.File,
-							URIBaseID: "%SRCROOT%",
+							URI: f.File,
 						},
 						Region: sarifRegion{
 							StartLine: max(f.Line, 1),
@@ -209,8 +208,7 @@ type sarifPhysicalLocation struct {
 }
 
 type sarifArtifactLocation struct {
-	URI       string `json:"uri"`
-	URIBaseID string `json:"uriBaseId"`
+	URI string `json:"uri"`
 }
 
 type sarifRegion struct {

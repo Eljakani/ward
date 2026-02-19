@@ -86,6 +86,12 @@ jobs:
     name: Laravel Security Scan
     runs-on: ubuntu-latest
 
+    permissions:
+      # Required to upload SARIF results to Code Scanning dashboard
+      security-events: write
+      # Required to checkout code
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
 
@@ -348,10 +354,10 @@ key: ward-${{ runner.os }}-v1.2.3
 
 ## Exit Codes
 
-| Code | Meaning                                                             |
-| ---- | ------------------------------------------------------------------- |
-| `0`  | Scan completed, no findings above threshold (or no `--fail-on` set) |
-| `1`  | Findings exceed `--fail-on` threshold                               |
+| Code | Meaning                                                                    |
+| ---- | -------------------------------------------------------------------------- |
+| `0`  | Scan completed, no findings above threshold (or no `--fail-on` set)        |
+| `1`  | Findings exceed `--fail-on` threshold                                      |
 | `1`  | Fatal error (missing baseline file, invalid path, unreadable config, etc.) |
 
 Both failure modes produce exit code `1`. If your pipeline needs to distinguish a "clean scan blocked by findings" from a "scan couldn't run at all", check stderr: fatal errors print an error message and exit before any scan output is written.
