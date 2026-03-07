@@ -13,9 +13,10 @@ rules:
     enabled: true
     tags: [auth, owasp-a07, cwe-306]
     patterns:
-      - type: regex
+      - type: regex-scoped
         target: routes-files
         pattern: 'Route::(get|post|put|patch|delete)\s*\([^;]*\)\s*;'
+        scope_exclude: 'Route::middleware|->middleware\('
         exclude_pattern: '(login|register|password|reset|verify|email|webhook|health|sitemap|api\/public|csrf|sanctum|__)'
     remediation: |
       Apply middleware to routes:
@@ -106,9 +107,10 @@ rules:
     enabled: true
     tags: [rate-limiting, owasp-a07, cwe-307]
     patterns:
-      - type: regex
+      - type: regex-scoped
         target: routes-files
         pattern: 'Route::(get|post|put|patch|delete)\s*\([^)]*api[^;]*\)\s*;'
+        scope_exclude: '->middleware\(.*throttle|Route::middleware.*throttle'
         exclude_pattern: '(webhook|health|public|status)'
     remediation: |
       Apply throttle middleware to API routes:

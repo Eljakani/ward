@@ -61,6 +61,8 @@ func (s *Scanner) evaluatePattern(rule config.RuleDefinition, pat config.Pattern
 		return s.checkFileExists(rule, pat, root)
 	case "regex", "contains":
 		return s.checkFileContent(rule, pat, root)
+	case "regex-scoped":
+		return s.checkScopedFileContent(rule, pat, root)
 	default:
 		return nil
 	}
@@ -291,6 +293,176 @@ func skipDir(name string) bool {
 		return true
 	}
 	return false
+}
+
+// checkScopedFileContent is like checkFileContent but suppresses matches that
+// fall inside a brace-delimited scope opened by a line matching pat.ScopeExclude.
+func (s *Scanner) checkScopedFileContent(rule config.RuleDefinition, pat config.PatternDef, root string) []models.Finding {
+	files := resolveTarget(pat.Target, root)
+	if len(files) == 0 {
+		return nil
+	}
+
+	re, err := regexp.Compile(pat.Pattern)
+	if err != nil {
+		return nil
+	}
+
+	var scopeRe *regexp.Regexp
+	if pat.ScopeExclude != "" {
+		scopeRe, err = regexp.Compile(pat.ScopeExclude)
+		if err != nil {
+			return nil
+		}
+	}
+
+	var excludeRe *regexp.Regexp
+	if pat.ExcludePattern != "" {
+		excludeRe, _ = regexp.Compile(pat.ExcludePattern)
+	}
+
+	var findings []models.Finding
+
+	for _, fpath := range files {
+		lines, err := readLines(fpath)
+		if err != nil {
+			continue
+		}
+
+		protected := buildProtectedRanges(lines, scopeRe)
+		rel, _ := filepath.Rel(root, fpath)
+
+		var matched []match
+		for i, line := range lines {
+			lineNum := i + 1
+			if protected[lineNum] {
+				continue
+			}
+			if !re.MatchString(line) {
+				continue
+			}
+			if excludeRe != nil && excludeRe.MatchString(line) {
+				continue
+			}
+			matched = append(matched, match{line: lineNum, text: strings.TrimSpace(line)})
+		}
+
+		if pat.Negative {
+			if len(matched) == 0 {
+				findings = append(findings, s.buildFinding(rule, rel, 0, ""))
+			}
+		} else {
+			for _, m := range matched {
+				findings = append(findings, s.buildFinding(rule, rel, m.line, m.text))
+			}
+		}
+	}
+
+	return findings
+}
+
+// buildProtectedRanges returns a set of line numbers (1-based) that fall inside
+// a brace-depth scope opened by a line matching scopeRe. Lines where braces
+// appear inside single- or double-quoted strings are ignored to avoid skew.
+func buildProtectedRanges(lines []string, scopeRe *regexp.Regexp) map[int]bool {
+	protected := make(map[int]bool)
+	if scopeRe == nil {
+		return protected
+	}
+
+	n := len(lines)
+	i := 0
+	for i < n {
+		line := lines[i]
+		lineNum := i + 1
+
+		if scopeRe.MatchString(line) {
+			// Count net braces on the triggering line itself.
+			depth := countBraces(line)
+
+			if depth > 0 {
+				// Scope opened on this line; mark from next line onward.
+				protected[lineNum] = true
+				j := i + 1
+				for j < n && depth > 0 {
+					depth += countBraces(lines[j])
+					if depth > 0 {
+						protected[j+1] = true
+					}
+					j++
+				}
+				i = j
+				continue
+			}
+			// Scope opener without a brace yet — scan forward for the opening {.
+			protected[lineNum] = true
+			j := i + 1
+			for j < n {
+				depth += countBraces(lines[j])
+				protected[j+1] = true
+				if depth > 0 {
+					j++
+					// Now consume until depth returns to 0.
+					for j < n && depth > 0 {
+						depth += countBraces(lines[j])
+						if depth > 0 {
+							protected[j+1] = true
+						}
+						j++
+					}
+					break
+				}
+				j++
+			}
+			i = j
+			continue
+		}
+		i++
+	}
+
+	return protected
+}
+
+// countBraces returns the net brace depth contribution of a line,
+// ignoring braces inside single- or double-quoted string literals.
+func countBraces(line string) int {
+	depth := 0
+	inSingle := false
+	inDouble := false
+	for k := 0; k < len(line); k++ {
+		ch := line[k]
+		if ch == '\\' && (inSingle || inDouble) {
+			k++ // skip escaped character
+			continue
+		}
+		switch {
+		case ch == '\'' && !inDouble:
+			inSingle = !inSingle
+		case ch == '"' && !inSingle:
+			inDouble = !inDouble
+		case ch == '{' && !inSingle && !inDouble:
+			depth++
+		case ch == '}' && !inSingle && !inDouble:
+			depth--
+		}
+	}
+	return depth
+}
+
+// readLines reads all lines of a file into a string slice.
+func readLines(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var lines []string
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	return lines, sc.Err()
 }
 
 func (s *Scanner) buildFinding(rule config.RuleDefinition, file string, line int, snippet string) models.Finding {

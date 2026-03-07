@@ -247,11 +247,12 @@ rules:
 
 ### Pattern Types
 
-| Type          | Description                              |
-| ------------- | ---------------------------------------- |
-| `regex`       | Regular expression match (line-by-line)  |
-| `contains`    | Exact substring match                    |
-| `file-exists` | Check if a file matching the glob exists |
+| Type           | Description                                                           |
+| -------------- | --------------------------------------------------------------------- |
+| `regex`        | Regular expression match (line-by-line)                               |
+| `contains`     | Exact substring match                                                 |
+| `file-exists`  | Check if a file matching the glob exists                              |
+| `regex-scoped` | Regex match that suppresses findings inside a detected scope block    |
 
 ### Targets
 
@@ -277,6 +278,38 @@ patterns:
     pattern: "@csrf"
     negative: true    # fire if @csrf is NOT found
 ```
+
+### Scoped Patterns
+
+Use `type: regex-scoped` when a match should only be flagged if it is **not** inside a surrounding block (e.g. a middleware group). The scanner reads the whole file, tracks brace depth to find blocks that start with `scope_exclude`, and suppresses any matches that fall within those blocks.
+
+```yaml
+patterns:
+  - type: regex-scoped
+    target: routes-files
+    pattern: 'Route::(get|post|put|patch|delete)\s*\([^;]*\)\s*;'
+    scope_exclude: 'Route::middleware|->middleware\('
+    exclude_pattern: '(login|register|password|reset|webhook|health)'
+```
+
+| Field           | Required | Description                                                                 |
+| --------------- | -------- | --------------------------------------------------------------------------- |
+| `pattern`       | yes      | Regex to match on each line                                                 |
+| `scope_exclude` | yes      | Regex identifying lines that open a protected scope (brace-depth tracked)   |
+| `exclude_pattern` | no     | Additional per-line exclusion applied after scope filtering (same as `regex`) |
+| `negative`      | no       | Invert: fire when pattern is absent (same semantics as `regex`)             |
+
+**How it works:**
+
+1. The file is scanned once to locate all scope blocks — lines matching `scope_exclude` that open a `{...}` block. The closing `}` is found by counting brace depth.
+2. Any line numbers that fall inside those ranges are marked as protected.
+3. The main `pattern` regex is then applied line-by-line, skipping protected lines.
+
+**Known limitations:**
+
+- Brace characters inside string literals or comments can skew depth counting. Keep this in mind for files with unusual formatting.
+- Routes defined in separate files that are `require`'d inside a group are not linked across files; those will still be scanned in isolation.
+- For edge cases that slip through, use the [baseline](#baseline-suppress-known-findings) to permanently suppress confirmed false positives.
 
 ### Rule Overrides
 

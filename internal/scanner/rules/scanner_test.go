@@ -151,6 +151,82 @@ func TestRulesScanner_FileExists(t *testing.T) {
 	}
 }
 
+func TestRulesScanner_RegexScoped_SuppressedInsideGroup(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "routes"), 0755)
+	os.WriteFile(filepath.Join(dir, "routes", "api.php"), []byte(`<?php
+Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
+    Route::post('/orders', [OrderController::class, 'store']);
+    Route::get('/orders', [OrderController::class, 'index']);
+});
+`), 0644)
+
+	rules := []config.RuleDefinition{
+		{
+			ID:       "TEST-SCOPED-001",
+			Title:    "Route without middleware",
+			Severity: "low",
+			Enabled:  true,
+			Patterns: []config.PatternDef{
+				{
+					Type:         "regex-scoped",
+					Target:       "routes-files",
+					Pattern:      `Route::(get|post|put|patch|delete)\s*\([^;]*\)\s*;`,
+					ScopeExclude: `Route::middleware|->middleware\(`,
+				},
+			},
+		},
+	}
+
+	s := New(rules)
+	pc := models.ProjectContext{RootPath: dir}
+	findings, _ := s.Scan(context.Background(), pc, func(f models.Finding) {})
+
+	if len(findings) != 0 {
+		t.Errorf("expected 0 findings for routes inside middleware group, got %d", len(findings))
+	}
+}
+
+func TestRulesScanner_RegexScoped_FlagsOutsideGroup(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "routes"), 0755)
+	os.WriteFile(filepath.Join(dir, "routes", "web.php"), []byte(`<?php
+Route::middleware('auth')->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+});
+
+Route::get('/about', [PageController::class, 'about']);
+`), 0644)
+
+	rules := []config.RuleDefinition{
+		{
+			ID:       "TEST-SCOPED-002",
+			Title:    "Route without middleware",
+			Severity: "low",
+			Enabled:  true,
+			Patterns: []config.PatternDef{
+				{
+					Type:         "regex-scoped",
+					Target:       "routes-files",
+					Pattern:      `Route::(get|post|put|patch|delete)\s*\([^;]*\)\s*;`,
+					ScopeExclude: `Route::middleware|->middleware\(`,
+				},
+			},
+		},
+	}
+
+	s := New(rules)
+	pc := models.ProjectContext{RootPath: dir}
+	findings, _ := s.Scan(context.Background(), pc, func(f models.Finding) {})
+
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding for route outside middleware group, got %d", len(findings))
+	}
+	if findings[0].Line != 6 {
+		t.Errorf("finding line = %d, want 6", findings[0].Line)
+	}
+}
+
 func TestSkipDir(t *testing.T) {
 	tests := []struct {
 		name string
