@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -52,13 +51,28 @@ func TestSARIFReporter_Generate_ValidatesOutput(t *testing.T) {
 	}
 
 	location := result.Locations[0]
-	// Verify URIBaseID is NOT present
-	if location.PhysicalLocation.ArtifactLocation.URIBaseID != "" {
-		t.Errorf("URIBaseID should be empty, got %q", location.PhysicalLocation.ArtifactLocation.URIBaseID)
-	}
-
-	// Verify URI is present and correct
 	if location.PhysicalLocation.ArtifactLocation.URI == "" {
 		t.Error("URI should not be empty")
+	}
+
+	if run.Tool.Driver.Rules[0].Properties.Security != "9.5" {
+		t.Errorf("security-severity = %q, want 9.5", run.Tool.Driver.Rules[0].Properties.Security)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(content, &raw); err != nil {
+		t.Fatalf("failed to unmarshal raw SARIF: %v", err)
+	}
+
+	runs := raw["runs"].([]any)
+	rawRun := runs[0].(map[string]any)
+	results := rawRun["results"].([]any)
+	rawResult := results[0].(map[string]any)
+	locations := rawResult["locations"].([]any)
+	rawLocation := locations[0].(map[string]any)
+	physicalLocation := rawLocation["physicalLocation"].(map[string]any)
+	artifactLocation := physicalLocation["artifactLocation"].(map[string]any)
+	if _, ok := artifactLocation["uriBaseId"]; ok {
+		t.Error("artifactLocation should not include uriBaseId")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/eljakani/ward/internal/models"
 )
@@ -39,15 +40,15 @@ func (r *SARIFReporter) Generate(_ context.Context, report *models.ScanReport) e
 			ruleIndex[f.ID] = len(rules)
 			rule := sarifRule{
 				ID:               f.ID,
-				Name:             f.Title,
-				ShortDescription: sarifMessage{Text: f.Title},
-				FullDescription:  sarifMessage{Text: f.Description},
+				Name:             sarifText(f.Title, f.ID),
+				ShortDescription: sarifMessage{Text: sarifText(f.Title, f.ID)},
+				FullDescription:  sarifMessage{Text: sarifText(f.Description, f.Title, f.ID)},
 				DefaultConfiguration: sarifRuleConfig{
 					Level: severityToSARIFLevel(f.Severity),
 				},
-				Help: sarifMessage{Text: f.Remediation},
+				Help: sarifMessage{Text: sarifText(f.Remediation, f.Description, f.Title, f.ID)},
 				Properties: sarifRuleProperties{
-					Tags:     []string{f.Category},
+					Tags:     sarifTags(f.Category),
 					Security: severityToSARIFSecurity(f.Severity),
 				},
 			}
@@ -62,7 +63,7 @@ func (r *SARIFReporter) Generate(_ context.Context, report *models.ScanReport) e
 			RuleID:    f.ID,
 			RuleIndex: ruleIndex[f.ID],
 			Level:     severityToSARIFLevel(f.Severity),
-			Message:   sarifMessage{Text: f.Title},
+			Message:   sarifMessage{Text: sarifText(f.Title, f.Description, f.ID)},
 			Locations: []sarifLocation{
 				{
 					PhysicalLocation: sarifPhysicalLocation{
@@ -129,16 +130,34 @@ func severityToSARIFLevel(s models.Severity) string {
 func severityToSARIFSecurity(s models.Severity) string {
 	switch s {
 	case models.SeverityCritical:
-		return "critical"
+		return "9.5"
 	case models.SeverityHigh:
-		return "high"
+		return "7.5"
 	case models.SeverityMedium:
-		return "medium"
+		return "5.5"
 	case models.SeverityLow:
-		return "low"
+		return "2.5"
 	default:
-		return "informational"
+		return "0.0"
 	}
+}
+
+func sarifText(values ...string) string {
+	for _, v := range values {
+		if text := strings.TrimSpace(v); text != "" {
+			return text
+		}
+	}
+	return "Ward security finding"
+}
+
+func sarifTags(category string) []string {
+	tags := []string{"security"}
+	category = strings.TrimSpace(category)
+	if category == "" || strings.EqualFold(category, "security") {
+		return tags
+	}
+	return append(tags, category)
 }
 
 // SARIF 2.1.0 data structures
