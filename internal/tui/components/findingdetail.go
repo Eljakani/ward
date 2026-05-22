@@ -1,7 +1,9 @@
 package components
 
 import (
+	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -44,6 +46,47 @@ func (d *FindingDetail) SetSize(w, h int) {
 // HandleKey processes scrolling keys.
 func (d *FindingDetail) HandleKey(msg tea.KeyMsg) {
 	d.viewport, _ = d.viewport.Update(msg)
+}
+
+// CopyableText returns the current finding as plain text for clipboard copy.
+func (d *FindingDetail) CopyableText() string {
+	if d.finding == nil {
+		return ""
+	}
+	f := d.finding
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Title:    %s\n", f.Title)
+	fmt.Fprintf(&sb, "Severity: %s\n", f.Severity.String())
+	fmt.Fprintf(&sb, "Category: %s\n", f.Category)
+	fmt.Fprintf(&sb, "File:     %s:%d\n", f.File, f.Line)
+	if f.Description != "" {
+		fmt.Fprintf(&sb, "\nDescription:\n%s\n", f.Description)
+	}
+	if f.CodeSnippet != "" {
+		fmt.Fprintf(&sb, "\nCode:\n%s\n", f.CodeSnippet)
+	}
+	if f.Remediation != "" {
+		fmt.Fprintf(&sb, "\nRemediation:\n%s\n", f.Remediation)
+	}
+	if len(f.References) > 0 {
+		fmt.Fprintf(&sb, "\nReferences:\n")
+		for _, ref := range f.References {
+			fmt.Fprintf(&sb, "  %s\n", ref)
+		}
+	}
+	return sb.String()
+}
+
+// CopiedMsg is returned by CopyCmd when the copy succeeds.
+type CopiedMsg struct{}
+
+// CopyCmd returns a tea.Cmd that copies text to the clipboard via OSC52.
+func CopyCmd(text string) tea.Cmd {
+	return func() tea.Msg {
+		encoded := base64.StdEncoding.EncodeToString([]byte(text))
+		fmt.Fprintf(os.Stderr, "\033]52;c;%s\a", encoded)
+		return CopiedMsg{}
+	}
 }
 
 func (d *FindingDetail) rebuildContent() {

@@ -151,6 +151,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case switchViewMsg:
 		a.activeView = msg.view
+
+	default:
+		if a.resultsView != nil {
+			cmd := a.resultsView.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	return a, tea.Batch(cmds...)

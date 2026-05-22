@@ -329,7 +329,7 @@ func (o *Orchestrator) buildReporters() []reporter.Reporter {
 		case "sarif":
 			reporters = append(reporters, reporter.NewSARIFReporter(outDir, o.version))
 		case "html":
-			reporters = append(reporters, reporter.NewHTMLReporter(outDir))
+			reporters = append(reporters, reporter.NewHTMLReporter(outDir, o.version))
 		case "markdown", "md":
 			reporters = append(reporters, reporter.NewMarkdownReporter(outDir, o.version))
 		case "terminal":

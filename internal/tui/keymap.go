@@ -14,6 +14,7 @@ type KeyMap struct {
 	SortFindings key.Binding
 	ScrollUp     key.Binding
 	ScrollDown   key.Binding
+	Copy         key.Binding
 }
 
 // DefaultKeyMap returns the default key bindings.
@@ -59,6 +60,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("pgdown"),
 			key.WithHelp("pgdown", "scroll down"),
 		),
+		Copy: key.NewBinding(
+			key.WithKeys("y"),
+			key.WithHelp("y", "copy detail"),
+		),
 	}
 }
 
@@ -72,6 +77,6 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Enter, k.Escape},
 		{k.Tab, k.SortFindings, k.ScrollUp, k.ScrollDown},
-		{k.Help, k.Quit},
+		{k.Copy, k.Help, k.Quit},
 	}
 }
