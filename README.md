@@ -30,7 +30,7 @@ Ward checks for all of these and more. It's designed to fit into the workflow yo
 Ward scans your project in a pipeline of five stages:
 
 ```
- Provider  -->  Resolvers  -->  Scanners  -->  Post-Process  -->  Report
+Provider  -->  Resolvers  -->  Scanners  -->  Post-Process  -->  Report
 ```
 
 **1. Provider** — Locates and prepares your project source. Supports local paths and git URLs (shallow clone).
@@ -113,7 +113,6 @@ ward scan /path/to/your/laravel-project
 
 ```bash
 ward scan https://github.com/user/laravel-project.git
-```bash
 ward scan ./my-app --output json
 ```
 
