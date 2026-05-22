@@ -109,7 +109,7 @@ func TestSARIFReporter(t *testing.T) {
 
 func TestHTMLReporter(t *testing.T) {
 	dir := t.TempDir()
-	r := NewHTMLReporter(dir)
+	r := NewHTMLReporter(dir, "v0.4.0")
 
 	err := r.Generate(context.Background(), testReport())
 	if err != nil {

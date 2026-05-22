@@ -14,6 +14,8 @@ import (
 	"github.com/eljakani/ward/internal/tui/theme"
 )
 
+const copiedFlashDuration = 2 * time.Second
+
 // SortColumn determines the sort field for findings.
 type SortColumn int
 
@@ -60,6 +62,10 @@ type ResultsView struct {
 	// Key bindings (local)
 	tabKey  key.Binding
 	sortKey key.Binding
+	copyKey key.Binding
+
+	// Clipboard flash
+	copiedAt time.Time
 }
 
 // NewResultsView creates a new results view from a scan report.
@@ -74,6 +80,9 @@ func NewResultsView(t *theme.Theme, report *models.ScanReport) *ResultsView {
 		),
 		sortKey: key.NewBinding(
 			key.WithKeys("s"),
+		),
+		copyKey: key.NewBinding(
+			key.WithKeys("y"),
 		),
 	}
 	copy(v.findings, report.Findings)
@@ -179,6 +188,14 @@ func (v *ResultsView) HandleKey(msg tea.KeyMsg) tea.Cmd {
 		v.sortFindings()
 		v.buildTable()
 		return nil
+	case key.Matches(msg, v.copyKey):
+		if text := v.detail.CopyableText(); text != "" {
+			return tea.Batch(
+				components.CopyCmd(text),
+				func() tea.Msg { return components.CopiedMsg{} },
+			)
+		}
+		return nil
 	}
 
 	if v.focusPanel == 0 {
@@ -197,6 +214,14 @@ func (v *ResultsView) HandleKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+// Update handles messages produced by commands (e.g. copy confirmation).
+func (v *ResultsView) Update(msg tea.Msg) tea.Cmd {
+	if _, ok := msg.(components.CopiedMsg); ok {
+		v.copiedAt = time.Now()
+	}
+	return nil
+}
+
 // View renders the complete results view.
 func (v *ResultsView) View(width, height int) string {
 	if width == 0 || height == 0 {
@@ -208,8 +233,11 @@ func (v *ResultsView) View(width, height int) string {
 	sep := components.RenderSeparator(v.theme, width)
 
 	// 2. Sort indicator
-	sortInfo := v.theme.Muted.Render(fmt.Sprintf("  Sorted by: %s  |  Panel: %s",
-		v.sortColumn.String(), panelName(v.focusPanel)))
+	sortInfoStr := fmt.Sprintf("  Sorted by: %s  |  Panel: %s", v.sortColumn.String(), panelName(v.focusPanel))
+	if time.Since(v.copiedAt) < copiedFlashDuration {
+		sortInfoStr += "  |  Copied!"
+	}
+	sortInfo := v.theme.Muted.Render(sortInfoStr)
 
 	// 3. Body: table (left) + detail (right)
 	tableView := v.renderTable()
